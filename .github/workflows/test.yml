@@ -26,3 +26,7 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           files: tmp/reports/results_junit.xml
+          check_run: false
+          comment_mode: off
+          compare_to_earlier_commit: false
+          job_summary: true
