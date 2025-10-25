@@ -62,13 +62,13 @@ Clone and install manually:
 ```bash
 git clone https://github.com/mparkachov/zshmq.git
 cd zshmq
-chmod +x zshmq
-sudo cp zshmq /usr/local/bin/
+make release
+sudo cp ./zshmq /usr/local/bin/zshmq
 ```
 
 Or run locally:
 ```bash
-./zshmq <command> ...
+zshmq <command> ...
 ```
 
 ## Development Guidelines
@@ -96,6 +96,17 @@ mkdir -p tmp/reports
 make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
 ```
 The report will be written to `tmp/reports/results_junit.xml` and published automatically by CI.
+
+Build a release artifact and bump the patch version:
+```sh
+make release
+```
+This creates a self-contained `zshmq` that embeds all library code and updates `VERSION`.
+
+### Supported Make Targets
+- `make bootstrap`
+- `make test`
+- `make release`
 
 ## Usage
 ### Step 0: Bootstrap the runtime directory

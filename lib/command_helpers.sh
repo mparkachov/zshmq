@@ -1,6 +1,24 @@
 #!/usr/bin/env sh
 # shellcheck shell=sh
 
+: ${ZSHMQ_COMMAND_REGISTRY:=}
+
+zshmq_register_command() {
+  cmd=$1
+  case " ${ZSHMQ_COMMAND_REGISTRY} " in
+    *" ${cmd} "*)
+      :
+      ;;
+    *)
+      if [ -n "${ZSHMQ_COMMAND_REGISTRY}" ]; then
+        ZSHMQ_COMMAND_REGISTRY="${ZSHMQ_COMMAND_REGISTRY} ${cmd}"
+      else
+        ZSHMQ_COMMAND_REGISTRY="${cmd}"
+      fi
+      ;;
+  esac
+}
+
 zshmq_command_file() {
   command=$1
   if [ -z "${ZSHMQ_ROOT:-}" ]; then
@@ -19,6 +37,12 @@ zshmq_command_metadata() {
   key=$2
   file=$(zshmq_command_file "$command") || return 1
   sed -n "s/^[[:space:]]*# *@${key}:[[:space:]]*//p" "$file"
+}
+
+zshmq_registered_commands() {
+  for cmd in $ZSHMQ_COMMAND_REGISTRY; do
+    [ -n "$cmd" ] && printf '%s\n' "$cmd"
+  done
 }
 
 zshmq_command_summary() {

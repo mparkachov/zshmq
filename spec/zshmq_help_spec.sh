@@ -1,6 +1,6 @@
 Describe 'zshmq --help'
   It 'lists available commands only and references per-command help'
-    When run ./zshmq --help
+    When run ./bin/zshmq.sh --help
     The status should be success
     The stdout should include 'Commands:'
     The stdout should include 'ctx_new - Bootstrap the runtime directory (default: /tmp/zshmq).'
@@ -13,7 +13,7 @@ End
 
 Describe 'zshmq ctx_new --help'
   It 'shows command-specific documentation'
-    When run ./zshmq ctx_new --help
+    When run ./bin/zshmq.sh ctx_new --help
     The status should be success
     The stdout should include 'Command: ctx_new'
     The stdout should include 'Options:'
@@ -22,7 +22,7 @@ End
 
 Describe 'zshmq ctx_destroy --help'
   It 'shows command-specific documentation'
-    When run ./zshmq ctx_destroy --help
+    When run ./bin/zshmq.sh ctx_destroy --help
     The status should be success
     The stdout should include 'Command: ctx_destroy'
     The stdout should include 'Options:'

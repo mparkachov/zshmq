@@ -81,3 +81,7 @@ ctx_destroy() {
 
   printf '%s\n' "$target"
 }
+
+if command -v zshmq_register_command >/dev/null 2>&1; then
+  zshmq_register_command ctx_destroy
+fi
