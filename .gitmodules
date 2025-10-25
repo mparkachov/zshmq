@@ -1,3 +1,6 @@
 [submodule "vendor/shellspec"]
 	path = vendor/shellspec
 	url = https://github.com/shellspec/shellspec
+[submodule "vendor/getoptions"]
+	path = vendor/getoptions
+	url = https://github.com/ko1nksm/getoptions

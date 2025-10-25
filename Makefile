@@ -5,8 +5,13 @@ SHELLSPEC = vendor/shellspec/shellspec
 SHELLSPEC_FLAGS ?=
 SHELLSPEC_SHELL ?= /bin/sh
 
+.PHONY: bootstrap
+bootstrap:
+	@git submodule update --init --recursive
+	@mkdir -p tmp
+
 .PHONY: test
-test: $(SHELLSPEC)
+test: bootstrap $(SHELLSPEC)
 	$(SHELLSPEC) --shell "$(SHELLSPEC_SHELL)" $(SHELLSPEC_FLAGS)
 
 $(SHELLSPEC):

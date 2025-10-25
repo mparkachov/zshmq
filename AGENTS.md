@@ -6,6 +6,10 @@ Keep the command-line entrypoint in the repository root during development, but 
 ## Build, Test, and Development Commands
 Expose every build, package, and test workflow through POSIX-compliant `make` targets (strictly POSIX make syntax - no GNU extensions). Provide at minimum `make build` to emit `bin/zshmq` and `make test` to run the full ShellSpec suite; add focused targets or variables for module-level specs when useful. The underlying scripts may still live in `scripts/`, but users should be able to rely on `make` alone. Verify the CLI manually via `./bin/zshmq <command> ...` before shipping a change.
 
+`zshmq ctx_new` must bootstrap the runtime directory (default `/tmp/zshmq`) and rely on the vendored getoptions parser for command-line flags.
+
+Provide `make bootstrap` to initialise submodules and the local `tmp/` workspace before running other targets.
+
 ## Coding Style & Naming Conventions
 Author POSIX-compliant shell (`#!/usr/bin/env sh`). Prefer two-space indentation, guard against unbound variables (`set -eu`), and use `printf` over `echo` when formatting output. Keep documentation and code ASCII-only - avoid emojis or iconography. Name files and functions with snake_case (`dispatcher_loop`, `lib/subscriber.sh`) and mirror relevant ZeroMQ function names when behaviors align to ease cross-referencing. Keep functions pure where possible; side-effect helpers should end with `_cmd` to signal command usage. Document non-obvious logic with short inline comments.
 

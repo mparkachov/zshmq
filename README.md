@@ -79,6 +79,11 @@ Or run locally:
 
 ## Testing
 
+Bootstrap vendored tooling and scaffolding:
+```sh
+make bootstrap
+```
+
 Run the ShellSpec suite:
 ```sh
 make test
@@ -93,6 +98,12 @@ make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/repo
 The report will be written to `tmp/reports/results_junit.xml` and published automatically by CI.
 
 ## Usage
+### Step 0: Bootstrap the runtime directory
+```sh
+zshmq ctx_new
+```
+Creates `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`) and prepares the state file.
+
 ### Step 1: Initialize
 ```bash
 zshmq init
@@ -145,6 +156,7 @@ Gracefully terminates the router and cleans up /tmp/zshmq/bus.
 
 ### Command Reference
 Command	Description
+zshmq ctx_new	Create the runtime directory structure (default: /tmp/zshmq)
 zshmq init	Initialize FIFO bus and state file
 zshmq dispatch	Start the dispatcher process
 zshmq pub <message>	Publish a message
@@ -157,6 +169,7 @@ zshmq --version	Display version info
 
 ### Environment Variables
 Variable	Default	Description
+ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx_new
 ZSHMQ_BUS	/tmp/zshmq/bus	Main FIFO path
 ZSHMQ_STATE	/tmp/zshmq/state	Subscription table
 ZSHMQ_DEBUG	0	Verbose mode flag
