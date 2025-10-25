@@ -90,7 +90,7 @@ Generate a JUnit report (ensure `tmp/reports` exists first):
 mkdir -p tmp/reports
 make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
 ```
-The report will be written to `tmp/reports/results_junit.xml`.
+The report will be written to `tmp/reports/results_junit.xml` and published automatically by CI.
 
 ## Usage
 ### Step 1: Initialize

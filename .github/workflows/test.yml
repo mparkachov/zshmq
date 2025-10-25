@@ -21,11 +21,8 @@ jobs:
         run: mkdir -p tmp/reports
       - name: Run ShellSpec suite
         run: make test SHELLSPEC_SHELL=/bin/sh SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
-      - name: Upload test report
+      - name: Publish test report
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          name: ShellSpec
-          path: tmp/reports/results_junit.xml
-          reporter: junit
-          fail-on-error: 'false'
+          files: tmp/reports/results_junit.xml
