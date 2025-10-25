@@ -83,6 +83,14 @@ Run the ShellSpec suite:
 ```sh
 make test
 ```
+By default the suite executes with `/bin/sh`. Override via `make test SHELLSPEC_SHELL=path/to/shell`.
+
+Generate a JUnit report (ensure `tmp/reports` exists first):
+```sh
+mkdir -p tmp/reports
+make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
+```
+The report will be written to `tmp/reports/results_junit.xml`.
 
 ## Usage
 ### Step 1: Initialize

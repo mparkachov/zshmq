@@ -17,5 +17,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Prepare report directory
+        run: mkdir -p tmp/reports
       - name: Run ShellSpec suite
-        run: make test
+        run: make test SHELLSPEC_SHELL=/bin/sh SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
+      - name: Upload test report
+        uses: actions/upload-test-results@v1
+        with:
+          junit_files: tmp/reports/results_junit.xml
