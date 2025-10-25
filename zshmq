@@ -53,6 +53,8 @@ zshmq_show_help() {
 # Load command implementations after helper definitions.
 # shellcheck disable=SC1091
 . "${ZSHMQ_ROOT}/lib/ctx_new.sh"
+# shellcheck disable=SC1091
+. "${ZSHMQ_ROOT}/lib/ctx_destroy.sh"
 
 if [ $# -eq 0 ]; then
   zshmq_show_help
@@ -74,6 +76,9 @@ case $command_name in
     ;;
   ctx_new)
     ctx_new "$@"
+    ;;
+  ctx_destroy)
+    ctx_destroy "$@"
     ;;
   *)
     printf 'zshmq: unknown command -- %s\n' "$command_name" >&2

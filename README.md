@@ -164,8 +164,15 @@ zshmq stop
 ```
 Gracefully terminates the router and cleans up /tmp/zshmq/bus.
 
+### Step 8: Destroy Runtime (optional)
+```bash
+zshmq ctx_destroy
+```
+Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`) when you are done testing.
+
 ### Command Reference
 Command	Description
+zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its state file
 zshmq ctx_new	Create the runtime directory structure (default: /tmp/zshmq)
 zshmq init	Initialize FIFO bus and state file
 zshmq dispatch	Start the dispatcher process
