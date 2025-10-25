@@ -11,3 +11,6 @@
 *~
 Session.vim
 .netrwhist
+
+# Project runtime artifacts
+tmp/

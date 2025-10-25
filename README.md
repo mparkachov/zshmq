@@ -77,6 +77,13 @@ Or run locally:
 - Assume only a POSIX shell exists on the host; vendor any additional tooling through submodules.
 - Name new functions after their ZeroMQ counterparts (or close equivalents) to signal behavioral parity.
 
+## Testing
+
+Run the ShellSpec suite:
+```sh
+make test
+```
+
 ## Usage
 ### Step 1: Initialize
 ```bash
