@@ -104,6 +104,16 @@ zshmq ctx_new
 ```
 Creates `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`) and prepares the state file.
 
+List available commands (each supports `-h` / `--help` for details):
+```sh
+zshmq --help
+```
+
+Show command-specific usage:
+```sh
+zshmq help ctx_new
+```
+
 ### Step 1: Initialize
 ```bash
 zshmq init

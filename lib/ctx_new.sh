@@ -1,59 +1,76 @@
 #!/usr/bin/env sh
 # shellcheck shell=sh
 
-# ctx_new bootstraps the runtime directory for zshmq.
-# It creates the target directory (default: /tmp/zshmq) and ensures a state file exists.
+#/**
+# ctx_new - Bootstrap the runtime directory used by zshmq commands.
+# @usage: zshmq ctx_new [--path PATH]
+# @summary: Bootstrap the runtime directory (default: /tmp/zshmq).
+# @description: Bootstrap the runtime directory so other zshmq commands can operate on a known path.
+# @option: -p, --path PATH    Target directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -h, --help         Display command documentation and exit.
+#*/
+
+ctx_new_parser_definition() {
+  zshmq_parser_defaults
+  param CTX_PATH -p --path -- 'Target directory to initialise'
+}
 
 ctx_new() {
-	set -eu
+  set -eu
 
-	if ! command -v getoptions >/dev/null 2>&1; then
-		if [ -z "${ZSHMQ_ROOT:-}" ]; then
-			printf '%s\n' 'ctx_new: ZSHMQ_ROOT is not set' >&2
-			return 1
-		fi
-		# Load getoptions library from the vendored dependency.
-		# shellcheck disable=SC1090
-		. "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-		# shellcheck disable=SC1090
-		. "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-		# shellcheck disable=SC1090
-		. "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-	fi
+  if ! command -v getoptions >/dev/null 2>&1; then
+    if [ -z "${ZSHMQ_ROOT:-}" ]; then
+      printf '%s\n' 'ctx_new: ZSHMQ_ROOT is not set' >&2
+      return 1
+    fi
+    # Load getoptions library from the vendored dependency.
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
+  fi
 
-	parser_definition_ctx_new() {
-		# Use getoptions DSL to define the parser.
-		setup REST help:usage -- "Usage: ctx_new [options]" ''
-		msg -- 'Options:'
-		param CTX_PATH -p --path -- 'Target directory to initialise'
-		disp :usage -h --help
-	}
+  set +e
+  zshmq_eval_parser ctx_new ctx_new_parser_definition "$@"
+  status=$?
+  set -e
 
-	# Generate and run the parser.
-	eval "$(getoptions parser_definition_ctx_new parse_ctx_new)" || return 1
-	parse_ctx_new "$@"
-	eval "set -- $REST"
+  case $status in
+    0)
+      eval "set -- $ZSHMQ_REST"
+      ;;
+    1)
+      return 1
+      ;;
+    2)
+      return 0
+      ;;
+  esac
 
-	if [ $# -gt 0 ]; then
-		printf 'ctx_new: unexpected argument -- %s\n' "$1" >&2
-		return 1
-	fi
+  if [ $# -gt 0 ]; then
+    printf 'ctx_new: unexpected argument -- %s\n' "$1" >&2
+    return 1
+  fi
 
-	target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
+  unset ZSHMQ_REST ||:
 
-	if [ -z "$target" ]; then
-		printf '%s\n' 'ctx_new: target path is empty' >&2
-		return 1
-	fi
+  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
-	if [ ! -d "$target" ]; then
-		mkdir -p "$target"
-	fi
+  if [ -z "$target" ]; then
+    printf '%s\n' 'ctx_new: target path is empty' >&2
+    return 1
+  fi
 
-	state_file="${target%/}/state"
-	if [ ! -f "$state_file" ]; then
-		: > "$state_file"
-	fi
+  if [ ! -d "$target" ]; then
+    mkdir -p "$target"
+  fi
 
-	printf '%s\n' "$target"
+  state_file="${target%/}/state"
+  if [ ! -f "$state_file" ]; then
+    : > "$state_file"
+  fi
+
+  printf '%s\n' "$target"
 }

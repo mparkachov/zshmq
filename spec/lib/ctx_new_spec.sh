@@ -1,4 +1,5 @@
 Describe 'ctx_new'
+  Include lib/command_helpers.sh
   Include lib/ctx_new.sh
 
   before_each() {
