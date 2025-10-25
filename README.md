@@ -1,62 +1,62 @@
-# 🌀 Zero Shell Message Queue (zshmq)
+# Zero Shell Message Queue (zshmq)
 
-**Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message bus for POSIX shells**.  
-It provides a simple **publish/subscribe** mechanism using only **FIFOs (named pipes)** — no sockets, daemons, or dependencies.
+**Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message bus for POSIX shells**.
+It provides a simple **publish/subscribe** mechanism using only **FIFOs (named pipes)** - no sockets, daemons, or dependencies.
 
-> 💬 Think of it as *ZeroMQ for the Unix shell* — pure inter-process messaging built entirely with standard POSIX tools.
-
----
-
-## 🚀 Overview
-
-- 🧩 **Pure POSIX:** Works anywhere `sh`, `mkfifo`, and `read` exist.  
-- 💬 **Publish/Subscribe:** Multiple publishers and dynamic subscribers.  
-- ⚙️ **Zero dependencies:** Uses only core Unix utilities.  
-- 💤 **Efficient:** Blocking FIFO I/O → near-zero CPU when idle.  
-- 🧠 **ZeroMQ-like CLI:** Familiar commands (`pub`, `sub`, `dispatch`, etc.).  
-- 🪶 **Tiny:** A single portable shell script.
+> Think of it as *ZeroMQ for the Unix shell* - pure inter-process messaging built entirely with standard POSIX tools.
 
 ---
 
-## 🧠 Motivation
+## Overview
 
-ZeroMQ is great — but sometimes you just need **inter-process messaging** between shell scripts, without compiling or linking anything.
+- **Pure POSIX:** Works anywhere `sh`, `mkfifo`, and `read` exist.
+- **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
+- **Zero dependencies:** Uses only core Unix utilities.
+- **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
+- **ZeroMQ-like CLI:** Familiar commands (`pub`, `sub`, `dispatch`, etc.).
+- **Tiny:** A single portable shell script.
 
-`zshmq` brings the same conceptual model — **topics**, **publishers**, and **subscribers** — into pure shell territory.
+---
 
-It’s perfect for:
+## Motivation
+
+ZeroMQ is great - but sometimes you just need **inter-process messaging** between shell scripts, without compiling or linking anything.
+
+`zshmq` brings the same conceptual model - **topics**, **publishers**, and **subscribers** - into pure shell territory.
+
+It's perfect for:
 - Event-driven shell workflows  
 - Lightweight coordination between processes  
 - Teaching message-passing fundamentals  
 
 ---
 
-## ⚙️ Requirements
+## Requirements
 
 | Component | Requirement |
 |------------|-------------|
 | Shell | POSIX-compliant (`bash`, `dash`, `zsh`, `ksh`, etc.) |
-| Tools | `mkfifo`, `grep`, `cat`, `awk`, `read`, `kill`, `rm` |
-| OS | Linux, macOS, BSD — any Unix with FIFOs |
+| Tools | Core POSIX utilities (`mkfifo`, `grep`, `cat`, `awk`, `read`, `kill`, `rm`) bundled with your shell environment; any extras ship as Git submodules |
+| OS | Linux, macOS, BSD - any Unix with FIFOs |
 
 ---
 
-## 🧩 Architecture
+## Architecture
 
 ```mermaid
 graph LR
-    P1[Publisher 1] --> B[( /tmp/zshmq.bus )]
+    P1[Publisher 1] --> B[( /tmp/zshmq/bus )]
     P2[Publisher 2] --> B
     B --> D[Dispatcher]
-    D --> S1[Subscriber A\nPattern: ^ALERT]
-    D --> S2[Subscriber B\nPattern: ^INFO]
+    D --> S1[Subscriber A - Pattern: ^ALERT]
+    D --> S2[Subscriber B - Pattern: ^INFO]
 ```
 
-- Publishers write messages into /tmp/zshmq.bus.
+- Publishers write messages into /tmp/zshmq/bus.
 - The Dispatcher reads messages and routes them to subscribers whose patterns match.
-- Each Subscriber owns its own FIFO (e.g. /tmp/zshmq.sub.<pid>).
+- Each Subscriber owns its own FIFO (e.g. /tmp/zshmq/sub.<pid>).
 
-## 🧰 Installation
+## Installation
 
 Clone and install manually:
 ```bash
@@ -71,58 +71,64 @@ Or run locally:
 ./zshmq <command> ...
 ```
 
-## 🖥️ Usage
-### 1️⃣ Initialize
+## Development Guidelines
+
+- Initialize tool dependencies with `git submodule update --init --recursive`; every non-shell helper ships as a Git submodule.
+- Assume only a POSIX shell exists on the host; vendor any additional tooling through submodules.
+- Name new functions after their ZeroMQ counterparts (or close equivalents) to signal behavioral parity.
+
+## Usage
+### Step 1: Initialize
 ```bash
 zshmq init
 ```
-Creates /tmp/zshmq.bus and the state file for subscriptions.
+Creates /tmp/zshmq/bus and the state file for subscriptions.
 
-### 2️⃣ Start Dispatcher
+### Step 2: Start Dispatcher
 ```bash
 zshmq dispatch
 ```
 Runs the router that listens for messages and subscription updates.
 
-### 3️⃣ Subscribe to a Topic
+### Step 3: Subscribe to a Topic
 ```bash
 zshmq sub '^ALERT'
 ```
-Creates /tmp/zshmq.sub.<pid> and prints matching messages:
+Creates /tmp/zshmq/sub.<pid> and prints matching messages:
 
 Subscribed to '^ALERT'
 ALERT: CPU overload
 
-### 4️⃣ Publish Messages
+### Step 4: Publish Messages
 ```bash
 zshmq pub "ALERT: CPU overload"
 zshmq pub "INFO: Cooling active"
 ```
 Messages are routed to subscribers with matching filters.
 
-### 5️⃣ List Active Subscribers
+### Step 5: List Active Subscribers
 ```bash
 zshmq list
 ```
 Example output:
 
 PID     FIFO                   PATTERN
-2314    /tmp/zshmq.sub.2314    ^ALERT
-2318    /tmp/zshmq.sub.2318    ^INFO
+2314    /tmp/zshmq/sub.2314    ^ALERT
+2318    /tmp/zshmq/sub.2318    ^INFO
 
-### 6️⃣ Unsubscribe
+### Step 6: Unsubscribe
 ```bash
 zshmq unsub
 ```
 Removes your FIFO and deregisters from the dispatcher.
 
-### 7️⃣ Stop Dispatcher
+### Step 7: Stop Dispatcher
 ```bash
 zshmq stop
 ```
-Gracefully terminates the router and cleans up /tmp/zshmq.bus.
+Gracefully terminates the router and cleans up /tmp/zshmq/bus.
 
-### 🧩 Command Reference
+### Command Reference
 Command	Description
 zshmq init	Initialize FIFO bus and state file
 zshmq dispatch	Start the dispatcher process
@@ -134,25 +140,25 @@ zshmq stop	Stop the dispatcher
 zshmq --help	Show usage
 zshmq --version	Display version info
 
-### ⚙️ Environment Variables
+### Environment Variables
 Variable	Default	Description
-ZSHMQ_BUS	/tmp/zshmq.bus	Main FIFO path
-ZSHMQ_STATE	/tmp/zshmq.state	Subscription table
+ZSHMQ_BUS	/tmp/zshmq/bus	Main FIFO path
+ZSHMQ_STATE	/tmp/zshmq/state	Subscription table
 ZSHMQ_DEBUG	0	Verbose mode flag
 
-### 💡 Example Session
+### Example Session
 
-Terminal 1 – Dispatcher
+Terminal 1 - Dispatcher
 ```bash
 zshmq dispatch
 ```
 
-Terminal 2 – Subscriber
+Terminal 2 - Subscriber
 ```bash
 zshmq sub '^ALERT'
 ```
 
-Terminal 3 – Publisher
+Terminal 3 - Publisher
 ```bash
 zshmq pub "ALERT: Disk full"
 zshmq pub "INFO: Backup started"
@@ -162,29 +168,30 @@ Subscriber Output
 ```bash
 ALERT: Disk full
 ```
-## 🧠 Implementation Summary
+## Implementation Summary
 
-- Dispatcher uses a blocking read on /tmp/zshmq.bus (no polling).
-- Subscriptions stored in /tmp/zshmq.state as PATTERN|FIFO.
-- Subscribers each have a private FIFO (/tmp/zshmq.sub.<pid>).
+- Dispatcher uses a blocking read on /tmp/zshmq/bus (no polling).
+- Subscriptions stored in /tmp/zshmq/state as PATTERN|FIFO.
+- Subscribers each have a private FIFO (/tmp/zshmq/sub.<pid>).
 - Multiple publishers supported (atomic writes up to PIPE_BUF).
 - Fully POSIX; no arrays or Bash-specific syntax.
 
-## ⚠️ Limitations
+## Limitations
 
 - One reader per FIFO (FIFO property).
 - No guaranteed delivery or message persistence.
 - Filtering uses shell patterns (case), not full regex.
 - Single host only (no networking).
+- Single broker per machine because all instances share the /tmp/zshmq/ directory.
 
-🧭 Roadmap
+## Roadmap
 
 - Implement REQ/REP and PUSH/PULL patterns
 - Add persistence and re-delivery
 - Add metrics and TTLs
 - Optional Unix-socket backend
 
-## 🧩 Design Philosophy
+## Design Philosophy
 
 **Principle	Description**
 Zero dependencies	Pure POSIX implementation
@@ -193,12 +200,12 @@ Transparent messages	Human-readable text
 Efficient	Blocking I/O, 0 % CPU idle
 Educational	Teaches message-passing concepts with FIFOs
 
-## 📜 License
+## License
 
-MIT License © 2025 — Maxim Parkachov
+MIT License (c) 2025 - Maxim Parkachov
 
-## 💬 Inspiration
+## Inspiration
 
-[ZeroMQ](https://zeromq.org/)  — distributed messaging patterns
-[Plan 9 Plumber](https://9p.io/sys/doc/plumb.html)  — pattern-based routing
-[The Unix philosophy](https://en.wikipedia.org/wiki/Unix_philosophy)  — composability through pipes
+[ZeroMQ](https://zeromq.org/) - distributed messaging patterns
+[Plan 9 Plumber](https://9p.io/sys/doc/plumb.html) - pattern-based routing
+[The Unix philosophy](https://en.wikipedia.org/wiki/Unix_philosophy) - composability through pipes

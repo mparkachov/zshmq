@@ -1,0 +1,13 @@
+# Vim swap files
+*.swp
+*.swo
+*.swx
+.*.swp
+.*.swo
+.*.swx
+
+# Vim backup and session files
+*.un~
+*~
+Session.vim
+.netrwhist
