@@ -32,7 +32,7 @@ send() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'send: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'send: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -61,7 +61,7 @@ send() {
   esac
 
   if [ $# -eq 0 ]; then
-    printf '%s\n' 'send: message is required' >&2
+    zshmq_log_error 'send: message is required'
     return 1
   fi
 
@@ -83,7 +83,7 @@ send() {
         body=$(send_ltrim "$body_part")
         ;;
       *)
-        printf '%s\n' 'send: unable to infer topic; provide --topic or include "<topic>: <message>".' >&2
+        zshmq_log_error 'send: unable to infer topic; provide --topic or include "<topic>: <message>".'
         return 1
         ;;
     esac
@@ -93,20 +93,20 @@ send() {
   fi
 
   if [ -z "$topic" ]; then
-    printf '%s\n' 'send: topic must not be empty' >&2
+    zshmq_log_error 'send: topic must not be empty'
     return 1
   fi
 
   case $topic in
     *'|'*)
-      printf '%s\n' 'send: topic must not contain "|"' >&2
+      zshmq_log_error 'send: topic must not contain "|"'
       return 1
       ;;
   esac
 
   case $body in
     *'|'*)
-      printf '%s\n' 'send: message must not contain "|"' >&2
+      zshmq_log_error 'send: message must not contain "|"'
       return 1
       ;;
   esac
@@ -114,13 +114,13 @@ send() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'send: target path is empty' >&2
+    zshmq_log_error 'send: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'send: refusing to operate on root directory' >&2
+      zshmq_log_error 'send: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -130,12 +130,12 @@ send() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -d "$target" ]; then
-    printf 'send: runtime directory not found: %s\n' "$target" >&2
+    zshmq_log_error 'send: runtime directory not found: %s' "$target"
     return 1
   fi
 
   if [ ! -p "$bus_path" ]; then
-    printf 'send: bus FIFO not found at %s\n' "$bus_path" >&2
+    zshmq_log_error 'send: bus FIFO not found at %s' "$bus_path"
     return 1
   fi
 
@@ -146,7 +146,7 @@ send() {
   fi
 
   if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    printf '%s\n' 'send: dispatcher is not running' >&2
+    zshmq_log_error 'send: dispatcher is not running'
     return 1
   fi
 

@@ -20,7 +20,7 @@ ctx_destroy() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'ctx_destroy: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'ctx_destroy: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -49,7 +49,7 @@ ctx_destroy() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'ctx_destroy: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'ctx_destroy: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -58,13 +58,13 @@ ctx_destroy() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'ctx_destroy: target path is empty' >&2
+    zshmq_log_error 'ctx_destroy: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'ctx_destroy: refusing to operate on root directory' >&2
+      zshmq_log_error 'ctx_destroy: refusing to operate on root directory'
       return 1
       ;;
   esac

@@ -1,5 +1,6 @@
 Describe 'ctx_new'
   Include lib/command_helpers.sh
+  Include lib/logging.sh
   Include lib/ctx_new.sh
 
   before_each() {
@@ -51,12 +52,12 @@ Describe 'ctx_new'
     : > "$preexisting/bus"
     When run ctx_new --path "$preexisting"
     The status should be failure
-    The stderr should include 'bus path is not a FIFO'
+    The stderr should include '[ERROR] ctx_new: bus path is not a FIFO'
   End
 
   It 'fails when unexpected positional arguments are provided'
     When run ctx_new extra
     The status should be failure
-    The stderr should include 'unexpected argument'
+    The stderr should include '[ERROR] ctx_new: unexpected argument'
   End
 End

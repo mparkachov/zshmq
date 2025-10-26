@@ -1,5 +1,6 @@
 Describe 'stop'
   Include lib/command_helpers.sh
+  Include lib/logging.sh
   Include lib/ctx_new.sh
   Include lib/start.sh
   Include lib/stop.sh
@@ -19,17 +20,17 @@ Describe 'stop'
   AfterEach 'after_each'
 
   It 'stops a running dispatcher and removes the pid file'
-    start --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    start --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     pid_before=$(cat "$ZSHMQ_CTX_ROOT/dispatcher.pid")
     When run stop --path "$ZSHMQ_CTX_ROOT"
     The status should be success
-    The stdout should include "Dispatcher stopped (pid=$pid_before)"
+    The stderr should include "[INFO] Dispatcher stopped (pid=$pid_before)"
     The path "$ZSHMQ_CTX_ROOT/dispatcher.pid" should not exist
   End
 
   It 'succeeds even when the dispatcher is not running'
     When run stop --path "$ZSHMQ_CTX_ROOT"
     The status should be success
-    The stdout should include 'Dispatcher is not running.'
+    The stderr should include '[INFO] Dispatcher is not running.'
   End
 End

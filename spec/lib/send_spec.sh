@@ -1,5 +1,6 @@
 Describe 'send'
   Include lib/command_helpers.sh
+  Include lib/logging.sh
   Include lib/ctx_new.sh
   Include lib/start.sh
   Include lib/stop.sh
@@ -30,6 +31,7 @@ Describe 'send'
 
   ensure_dispatcher_running() {
     ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    SEND_SPEC_CAPTURE=${SEND_SPEC_CAPTURE:-"$SHELLSPEC_TMPDIR/send_capture"}
     : > "$SEND_SPEC_CAPTURE"
     {
       while IFS= read -r line; do
@@ -58,7 +60,7 @@ Describe 'send'
     ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
     When run send --path "$ZSHMQ_CTX_ROOT" 'ALERT: no loop'
     The status should be failure
-    The stderr should include 'dispatcher is not running'
+    The stderr should include '[ERROR] send: dispatcher is not running'
   End
 
   It 'requires an explicit topic when it cannot infer one'
@@ -66,6 +68,6 @@ Describe 'send'
     ensure_dispatcher_running
     When run send --path "$ZSHMQ_CTX_ROOT" 'Malformed message'
     The status should be failure
-    The stderr should include 'unable to infer topic'
+    The stderr should include '[ERROR] send: unable to infer topic'
   End
 End

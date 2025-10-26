@@ -195,6 +195,7 @@ ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx_new
 ZSHMQ_BUS	/tmp/zshmq/bus	Main FIFO path
 ZSHMQ_STATE	/tmp/zshmq/state	Subscription table
 ZSHMQ_DISPATCH_PID	/tmp/zshmq/dispatcher.pid	PID file tracked by start/stop
+ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
 ZSHMQ_DEBUG	0	Verbose mode flag
 
 ### Example Session

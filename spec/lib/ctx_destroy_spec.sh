@@ -1,5 +1,6 @@
 Describe 'ctx_destroy'
   Include lib/command_helpers.sh
+  Include lib/logging.sh
   Include lib/ctx_new.sh
   Include lib/ctx_destroy.sh
 

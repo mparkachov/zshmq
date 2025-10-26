@@ -24,6 +24,8 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/command_helpers.sh"
+  # shellcheck disable=SC1091
+  . "${ZSHMQ_ROOT}/lib/logging.sh"
 
   # Load command implementations after helper definitions.
   # shellcheck disable=SC1091
@@ -49,6 +51,7 @@ zshmq_command_list() {
     cmd=${path##*/}
     cmd=${cmd%.sh}
     [ "$cmd" = "command_helpers" ] && continue
+    [ "$cmd" = "logging" ] && continue
     printf '%s\n' "$cmd"
   done
 }

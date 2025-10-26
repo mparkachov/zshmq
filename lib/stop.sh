@@ -20,7 +20,7 @@ stop() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'stop: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'stop: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -49,7 +49,7 @@ stop() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'stop: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'stop: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -58,13 +58,13 @@ stop() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'stop: target path is empty' >&2
+    zshmq_log_error 'stop: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'stop: refusing to operate on root directory' >&2
+      zshmq_log_error 'stop: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -73,20 +73,20 @@ stop() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -f "$pid_path" ]; then
-    printf '%s\n' 'Dispatcher is not running.'
+    zshmq_log_info 'Dispatcher is not running.'
     return 0
   fi
 
   dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
   if [ -z "$dispatcher_pid" ]; then
     rm -f "$pid_path"
-    printf '%s\n' 'Dispatcher is not running.'
+    zshmq_log_info 'Dispatcher is not running.'
     return 0
   fi
 
   if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
     rm -f "$pid_path"
-    printf '%s\n' 'Dispatcher is not running.'
+    zshmq_log_info 'Dispatcher is not running.'
     return 0
   fi
 
@@ -100,12 +100,12 @@ stop() {
   done
 
   if kill -0 "$dispatcher_pid" 2>/dev/null; then
-    printf 'stop: dispatcher (pid=%s) did not terminate\n' "$dispatcher_pid" >&2
+    zshmq_log_error 'stop: dispatcher (pid=%s) did not terminate' "$dispatcher_pid"
     return 1
   fi
 
   rm -f "$pid_path"
-  printf 'Dispatcher stopped (pid=%s)\n' "$dispatcher_pid"
+  zshmq_log_info 'Dispatcher stopped (pid=%s)' "$dispatcher_pid"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

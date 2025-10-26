@@ -19,8 +19,8 @@ ctx_new() {
   set -eu
 
   if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'ctx_new: ZSHMQ_ROOT is not set' >&2
+    if [ -z "${ZSHMQ_ROOT:-}" ] ; then
+      zshmq_log_error 'ctx_new: ZSHMQ_ROOT is not set'
       return 1
     fi
     # Load getoptions library from the vendored dependency.
@@ -50,7 +50,7 @@ ctx_new() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'ctx_new: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'ctx_new: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -59,13 +59,13 @@ ctx_new() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'ctx_new: target path is empty' >&2
+    zshmq_log_error 'ctx_new: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'ctx_new: refusing to operate on root directory' >&2
+      zshmq_log_error 'ctx_new: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -79,12 +79,12 @@ ctx_new() {
   bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
 
   if [ -z "$state_path" ]; then
-    printf '%s\n' 'ctx_new: state path is empty' >&2
+    zshmq_log_error 'ctx_new: state path is empty'
     return 1
   fi
 
   if [ -z "$bus_path" ]; then
-    printf '%s\n' 'ctx_new: bus path is empty' >&2
+    zshmq_log_error 'ctx_new: bus path is empty'
     return 1
   fi
 
@@ -101,7 +101,7 @@ ctx_new() {
   fi
 
   if [ -e "$state_path" ] && [ ! -f "$state_path" ]; then
-    printf 'ctx_new: state path is not a regular file: %s\n' "$state_path" >&2
+    zshmq_log_error 'ctx_new: state path is not a regular file: %s' "$state_path"
     return 1
   fi
 
@@ -123,7 +123,7 @@ ctx_new() {
     if [ -p "$bus_path" ]; then
       rm -f "$bus_path"
     else
-      printf 'ctx_new: bus path is not a FIFO: %s\n' "$bus_path" >&2
+      zshmq_log_error 'ctx_new: bus path is not a FIFO: %s' "$bus_path"
       return 1
     fi
   fi

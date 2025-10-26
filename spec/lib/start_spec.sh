@@ -1,5 +1,6 @@
 Describe 'start'
   Include lib/command_helpers.sh
+  Include lib/logging.sh
   Include lib/ctx_new.sh
   Include lib/start.sh
   Include lib/stop.sh
@@ -23,7 +24,7 @@ Describe 'start'
     ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be success
-    The stdout should include 'Dispatcher started (pid='
+    The stderr should include '[INFO] Dispatcher started (pid='
     The path "$ZSHMQ_CTX_ROOT/dispatcher.pid" should be file
     The file "$ZSHMQ_CTX_ROOT/dispatcher.pid" should not be empty file
     The contents of file "$ZSHMQ_CTX_ROOT/dispatcher.pid" should match pattern '[0-9][0-9]*'
@@ -31,15 +32,15 @@ Describe 'start'
 
   It 'fails when the dispatcher is already running'
     ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
-    start --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    start --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be failure
-    The stderr should include 'dispatcher already running'
+    The stderr should include '[INFO] start: dispatcher already running (pid='
   End
 
   It 'fails when the runtime directory has not been initialised'
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be failure
-    The stderr should include 'runtime directory not found'
+    The stderr should include '[ERROR] start: runtime directory not found'
   End
 End

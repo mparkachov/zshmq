@@ -423,6 +423,83 @@ zshmq_eval_parser() {
 
 # shellcheck shell=sh
 
+ZSHMQ_LOG_LEVEL=${ZSHMQ_LOG_LEVEL:-INFO}
+
+zshmq_log_level_value() {
+  level=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')
+  case $level in
+    TRACE) printf '%s\n' 0 ;;
+    DEBUG) printf '%s\n' 10 ;;
+    INFO) printf '%s\n' 20 ;;
+    WARN) printf '%s\n' 30 ;;
+    ERROR) printf '%s\n' 40 ;;
+    FATAL) printf '%s\n' 50 ;;
+    *) printf '%s\n' 20 ;;
+  esac
+}
+
+zshmq_log_threshold_value() {
+  zshmq_log_level_value "${ZSHMQ_LOG_LEVEL:-INFO}"
+}
+
+zshmq_log_should_emit() {
+  level_value=$(zshmq_log_level_value "$1")
+  threshold=$(zshmq_log_threshold_value)
+  [ "$level_value" -ge "$threshold" ]
+}
+
+zshmq_log_timestamp() {
+  date '+%Y-%m-%d %H:%M:%S'
+}
+
+zshmq_log() {
+  level=${1:-INFO}
+  shift || :
+  normalized=$(printf '%s' "$level" | tr '[:lower:]' '[:upper:]')
+  zshmq_log_should_emit "$normalized" || return 0
+
+  if [ $# -gt 0 ]; then
+    format=$1
+    shift || :
+    if [ $# -gt 0 ]; then
+      message=$(printf "$format" "$@")
+    else
+      message=$format
+    fi
+  else
+    message=
+  fi
+
+  timestamp=$(zshmq_log_timestamp)
+  printf '%s [%s] %s\n' "$timestamp" "$normalized" "$message" >&2
+}
+
+zshmq_log_trace() {
+  zshmq_log TRACE "$@"
+}
+
+zshmq_log_debug() {
+  zshmq_log DEBUG "$@"
+}
+
+zshmq_log_info() {
+  zshmq_log INFO "$@"
+}
+
+zshmq_log_warn() {
+  zshmq_log WARN "$@"
+}
+
+zshmq_log_error() {
+  zshmq_log ERROR "$@"
+}
+
+zshmq_log_fatal() {
+  zshmq_log FATAL "$@"
+}
+
+# shellcheck shell=sh
+
 #/**
 # ctx_new - Bootstrap the runtime directory used by zshmq commands.
 # @usage: zshmq ctx_new [--path PATH]
@@ -441,8 +518,8 @@ ctx_new() {
   set -eu
 
   if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'ctx_new: ZSHMQ_ROOT is not set' >&2
+    if [ -z "${ZSHMQ_ROOT:-}" ] ; then
+      zshmq_log_error 'ctx_new: ZSHMQ_ROOT is not set'
       return 1
     fi
     # Load getoptions library from the vendored dependency.
@@ -472,7 +549,7 @@ ctx_new() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'ctx_new: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'ctx_new: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -481,13 +558,13 @@ ctx_new() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'ctx_new: target path is empty' >&2
+    zshmq_log_error 'ctx_new: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'ctx_new: refusing to operate on root directory' >&2
+      zshmq_log_error 'ctx_new: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -501,12 +578,12 @@ ctx_new() {
   bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
 
   if [ -z "$state_path" ]; then
-    printf '%s\n' 'ctx_new: state path is empty' >&2
+    zshmq_log_error 'ctx_new: state path is empty'
     return 1
   fi
 
   if [ -z "$bus_path" ]; then
-    printf '%s\n' 'ctx_new: bus path is empty' >&2
+    zshmq_log_error 'ctx_new: bus path is empty'
     return 1
   fi
 
@@ -523,7 +600,7 @@ ctx_new() {
   fi
 
   if [ -e "$state_path" ] && [ ! -f "$state_path" ]; then
-    printf 'ctx_new: state path is not a regular file: %s\n' "$state_path" >&2
+    zshmq_log_error 'ctx_new: state path is not a regular file: %s' "$state_path"
     return 1
   fi
 
@@ -545,7 +622,7 @@ ctx_new() {
     if [ -p "$bus_path" ]; then
       rm -f "$bus_path"
     else
-      printf 'ctx_new: bus path is not a FIFO: %s\n' "$bus_path" >&2
+      zshmq_log_error 'ctx_new: bus path is not a FIFO: %s' "$bus_path"
       return 1
     fi
   fi
@@ -580,7 +657,7 @@ ctx_destroy() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'ctx_destroy: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'ctx_destroy: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -609,7 +686,7 @@ ctx_destroy() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'ctx_destroy: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'ctx_destroy: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -618,13 +695,13 @@ ctx_destroy() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'ctx_destroy: target path is empty' >&2
+    zshmq_log_error 'ctx_destroy: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'ctx_destroy: refusing to operate on root directory' >&2
+      zshmq_log_error 'ctx_destroy: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -733,7 +810,7 @@ start() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'start: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'start: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -762,7 +839,7 @@ start() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'start: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'start: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -771,13 +848,13 @@ start() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'start: target path is empty' >&2
+    zshmq_log_error 'start: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'start: refusing to operate on root directory' >&2
+      zshmq_log_error 'start: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -788,24 +865,24 @@ start() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -d "$target" ]; then
-    printf 'start: runtime directory not found: %s\n' "$target" >&2
+    zshmq_log_error 'start: runtime directory not found: %s' "$target"
     return 1
   fi
 
   if [ ! -p "$bus_path" ]; then
-    printf 'start: bus FIFO not found at %s\n' "$bus_path" >&2
+    zshmq_log_error 'start: bus FIFO not found at %s' "$bus_path"
     return 1
   fi
 
   if [ ! -f "$state_path" ]; then
-    printf 'start: state file not found at %s\n' "$state_path" >&2
+    zshmq_log_error 'start: state file not found at %s' "$state_path"
     return 1
   fi
 
   if [ -f "$pid_path" ]; then
     existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
     if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-      printf 'start: dispatcher already running (pid=%s)\n' "$existing_pid" >&2
+      zshmq_log_info 'start: dispatcher already running (pid=%s)' "$existing_pid"
       return 1
     fi
     rm -f "$pid_path"
@@ -814,7 +891,7 @@ start() {
   zshmq_dispatch_loop "$bus_path" "$state_path" &
   dispatcher_pid=$!
   printf '%s\n' "$dispatcher_pid" > "$pid_path"
-  printf 'Dispatcher started (pid=%s)\n' "$dispatcher_pid"
+  zshmq_log_info 'Dispatcher started (pid=%s)' "$dispatcher_pid"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then
@@ -842,7 +919,7 @@ stop() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'stop: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'stop: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -871,7 +948,7 @@ stop() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'stop: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'stop: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -880,13 +957,13 @@ stop() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'stop: target path is empty' >&2
+    zshmq_log_error 'stop: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'stop: refusing to operate on root directory' >&2
+      zshmq_log_error 'stop: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -895,20 +972,20 @@ stop() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -f "$pid_path" ]; then
-    printf '%s\n' 'Dispatcher is not running.'
+    zshmq_log_info 'Dispatcher is not running.'
     return 0
   fi
 
   dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
   if [ -z "$dispatcher_pid" ]; then
     rm -f "$pid_path"
-    printf '%s\n' 'Dispatcher is not running.'
+    zshmq_log_info 'Dispatcher is not running.'
     return 0
   fi
 
   if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
     rm -f "$pid_path"
-    printf '%s\n' 'Dispatcher is not running.'
+    zshmq_log_info 'Dispatcher is not running.'
     return 0
   fi
 
@@ -922,12 +999,12 @@ stop() {
   done
 
   if kill -0 "$dispatcher_pid" 2>/dev/null; then
-    printf 'stop: dispatcher (pid=%s) did not terminate\n' "$dispatcher_pid" >&2
+    zshmq_log_error 'stop: dispatcher (pid=%s) did not terminate' "$dispatcher_pid"
     return 1
   fi
 
   rm -f "$pid_path"
-  printf 'Dispatcher stopped (pid=%s)\n' "$dispatcher_pid"
+  zshmq_log_info 'Dispatcher stopped (pid=%s)' "$dispatcher_pid"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then
@@ -967,7 +1044,7 @@ send() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'send: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'send: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -996,7 +1073,7 @@ send() {
   esac
 
   if [ $# -eq 0 ]; then
-    printf '%s\n' 'send: message is required' >&2
+    zshmq_log_error 'send: message is required'
     return 1
   fi
 
@@ -1018,7 +1095,7 @@ send() {
         body=$(send_ltrim "$body_part")
         ;;
       *)
-        printf '%s\n' 'send: unable to infer topic; provide --topic or include "<topic>: <message>".' >&2
+        zshmq_log_error 'send: unable to infer topic; provide --topic or include "<topic>: <message>".'
         return 1
         ;;
     esac
@@ -1028,20 +1105,20 @@ send() {
   fi
 
   if [ -z "$topic" ]; then
-    printf '%s\n' 'send: topic must not be empty' >&2
+    zshmq_log_error 'send: topic must not be empty'
     return 1
   fi
 
   case $topic in
     *'|'*)
-      printf '%s\n' 'send: topic must not contain "|"' >&2
+      zshmq_log_error 'send: topic must not contain "|"'
       return 1
       ;;
   esac
 
   case $body in
     *'|'*)
-      printf '%s\n' 'send: message must not contain "|"' >&2
+      zshmq_log_error 'send: message must not contain "|"'
       return 1
       ;;
   esac
@@ -1049,13 +1126,13 @@ send() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'send: target path is empty' >&2
+    zshmq_log_error 'send: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'send: refusing to operate on root directory' >&2
+      zshmq_log_error 'send: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -1065,12 +1142,12 @@ send() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -d "$target" ]; then
-    printf 'send: runtime directory not found: %s\n' "$target" >&2
+    zshmq_log_error 'send: runtime directory not found: %s' "$target"
     return 1
   fi
 
   if [ ! -p "$bus_path" ]; then
-    printf 'send: bus FIFO not found at %s\n' "$bus_path" >&2
+    zshmq_log_error 'send: bus FIFO not found at %s' "$bus_path"
     return 1
   fi
 
@@ -1081,7 +1158,7 @@ send() {
   fi
 
   if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    printf '%s\n' 'send: dispatcher is not running' >&2
+    zshmq_log_error 'send: dispatcher is not running'
     return 1
   fi
 
@@ -1118,6 +1195,8 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/command_helpers.sh"
+  # shellcheck disable=SC1091
+  . "${ZSHMQ_ROOT}/lib/logging.sh"
 
   # Load command implementations after helper definitions.
   # shellcheck disable=SC1091
@@ -1143,6 +1222,7 @@ zshmq_command_list() {
     cmd=${path##*/}
     cmd=${cmd%.sh}
     [ "$cmd" = "command_helpers" ] && continue
+    [ "$cmd" = "logging" ] && continue
     printf '%s\n' "$cmd"
   done
 }

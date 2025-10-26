@@ -75,7 +75,7 @@ start() {
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      printf '%s\n' 'start: ZSHMQ_ROOT is not set' >&2
+      zshmq_log_error 'start: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -104,7 +104,7 @@ start() {
   esac
 
   if [ $# -gt 0 ]; then
-    printf 'start: unexpected argument -- %s\n' "$1" >&2
+    zshmq_log_error 'start: unexpected argument -- %s' "$1"
     return 1
   fi
 
@@ -113,13 +113,13 @@ start() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    printf '%s\n' 'start: target path is empty' >&2
+    zshmq_log_error 'start: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      printf '%s\n' 'start: refusing to operate on root directory' >&2
+      zshmq_log_error 'start: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -130,24 +130,24 @@ start() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -d "$target" ]; then
-    printf 'start: runtime directory not found: %s\n' "$target" >&2
+    zshmq_log_error 'start: runtime directory not found: %s' "$target"
     return 1
   fi
 
   if [ ! -p "$bus_path" ]; then
-    printf 'start: bus FIFO not found at %s\n' "$bus_path" >&2
+    zshmq_log_error 'start: bus FIFO not found at %s' "$bus_path"
     return 1
   fi
 
   if [ ! -f "$state_path" ]; then
-    printf 'start: state file not found at %s\n' "$state_path" >&2
+    zshmq_log_error 'start: state file not found at %s' "$state_path"
     return 1
   fi
 
   if [ -f "$pid_path" ]; then
     existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
     if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-      printf 'start: dispatcher already running (pid=%s)\n' "$existing_pid" >&2
+      zshmq_log_info 'start: dispatcher already running (pid=%s)' "$existing_pid"
       return 1
     fi
     rm -f "$pid_path"
@@ -156,7 +156,7 @@ start() {
   zshmq_dispatch_loop "$bus_path" "$state_path" &
   dispatcher_pid=$!
   printf '%s\n' "$dispatcher_pid" > "$pid_path"
-  printf 'Dispatcher started (pid=%s)\n' "$dispatcher_pid"
+  zshmq_log_info 'Dispatcher started (pid=%s)' "$dispatcher_pid"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then
