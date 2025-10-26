@@ -7,7 +7,7 @@
 # @summary: Publish a message through the dispatcher FIFO.
 # @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the bus so matching subscribers receive it.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
-# @option: --topic TOPIC      Explicit topic to apply instead of inferring from MESSAGE (before the first colon).
+# @option: -T, --topic TOPIC  Explicit topic to apply instead of inferring from MESSAGE (before the first colon).
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
@@ -16,7 +16,7 @@
 send_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to target'
-  param SEND_TOPIC --topic -- 'Explicit topic to apply'
+  param SEND_TOPIC -T --topic -- 'Explicit topic to apply'
 }
 
 send_trim() {
@@ -152,8 +152,12 @@ send() {
     return 1
   fi
 
+  zshmq_log_trace 'send: topic=%s message=%s' "$topic" "$body"
   printf 'PUB|%s|%s\n' "$topic" "$body" > "$bus_path"
-  printf '%s|%s\n' "$topic" "$body"
+
+  if ! zshmq_log_should_emit TRACE; then
+    printf '%s|%s\n' "$topic" "$body"
+  fi
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

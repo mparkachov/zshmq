@@ -43,4 +43,36 @@ Describe 'start'
     The status should be failure
     The stderr should include '[ERROR] start: runtime directory not found'
   End
+
+  start_trace_log_helper() {
+    export ZSHMQ_LOG_LEVEL=TRACE
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    trace_log="$SHELLSPEC_TMPDIR/start_trace.log"
+    : > "$trace_log"
+
+    zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/bus" "${ZSHMQ_CTX_ROOT}/state" 2>"$trace_log" &
+    dispatcher_pid=$!
+
+    printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/bus"
+
+    attempts=0
+    while [ "$attempts" -lt 50 ]; do
+      if grep -F 'start: dispatch' "$trace_log" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.1
+      attempts=$((attempts + 1))
+    done
+
+    kill "$dispatcher_pid" 2>/dev/null || :
+    wait "$dispatcher_pid" 2>/dev/null || :
+
+    cat "$trace_log"
+  }
+
+  It 'logs dispatched messages when trace logging is enabled'
+    When run start_trace_log_helper
+    The status should be success
+    The stdout should include '[TRACE] start: topic=ALERT message=system overload'
+  End
 End

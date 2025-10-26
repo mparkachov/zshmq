@@ -147,7 +147,7 @@ zshmq send "ALERT: CPU overload"
 zshmq send "INFO: Cooling active"
 ```
 Messages are routed to subscribers with matching filters.
-`send` infers the topic from the text before the first colon (`ALERT` or `INFO` above); pass `--topic <name>` to override the inference when your payload lacks a colon.
+`send` infers the topic from the text before the first colon (`ALERT` or `INFO` above); pass `-T <name>` / `--topic <name>` to override the inference when your payload lacks a colon. When TRACE logging is enabled (`-t`/`--trace`), the routing tuple is suppressed on stdout—the TRACE log on stderr carries the payload details.
 
 ### Step 4: List Active Subscribers
 ```bash
@@ -182,7 +182,7 @@ Command	Description
 zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
 zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
 zshmq start	Start the dispatcher process (use --foreground to stay attached to the terminal)
-zshmq send <message>	Publish a message (infers the topic from "<topic>: <message>" or use --topic)
+zshmq send <message>	Publish a message (infers the topic from "<topic>: <message>" or use -T/--topic)
 zshmq sub <pattern>	Subscribe to matching messages
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber

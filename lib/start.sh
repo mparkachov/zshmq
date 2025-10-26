@@ -56,11 +56,13 @@ zshmq_dispatch_loop() {
         topic=${payload%%|*}
         message=${payload#*|}
         if [ -f "$state_path" ] && [ -n "$topic" ]; then
+          zshmq_log_trace 'start: topic=%s message=%s' "$topic" "$message"
           while IFS='|' read -r pattern fifo_path; do
             [ -n "$pattern" ] || continue
             [ -n "$fifo_path" ] || continue
             if printf '%s\n' "$topic" | grep -E -- "$pattern" >/dev/null 2>&1; then
               if [ -p "$fifo_path" ]; then
+                zshmq_log_trace 'start: deliver topic=%s message=%s pattern=%s fifo=%s' "$topic" "$message" "$pattern" "$fifo_path"
                 { printf '%s\n' "$message"; } >> "$fifo_path" 2>/dev/null || :
               fi
             fi

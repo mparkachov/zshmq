@@ -56,6 +56,17 @@ Describe 'send'
     The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|ALERT|system overload'
   End
 
+  It 'logs the dispatched message when trace logging is enabled'
+    SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
+    ensure_dispatcher_running
+    When run send --path "$ZSHMQ_CTX_ROOT" --trace 'ALERT: system overload'
+    The status should be success
+    The stdout should equal ''
+    The stderr should include '[TRACE] send: topic=ALERT message=system overload'
+    wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
+    SEND_SPEC_READER_PID=
+  End
+
   It 'fails when the dispatcher is not running'
     ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
     When run send --path "$ZSHMQ_CTX_ROOT" 'ALERT: no loop'
@@ -69,5 +80,17 @@ Describe 'send'
     When run send --path "$ZSHMQ_CTX_ROOT" 'Malformed message'
     The status should be failure
     The stderr should include '[ERROR] send: unable to infer topic'
+  End
+
+  It 'accepts -T for explicit topics without enabling trace logging'
+    SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
+    ensure_dispatcher_running
+    When run send --path "$ZSHMQ_CTX_ROOT" -T ALERT 'System overload'
+    The status should be success
+    The stdout should equal 'ALERT|System overload'
+    The stderr should not include '[TRACE]'
+    wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
+    SEND_SPEC_READER_PID=
+    The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|ALERT|System overload'
   End
 End
