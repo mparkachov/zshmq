@@ -76,7 +76,7 @@ zshmq_show_help() {
     printf '  %s - %s\n' "$cmd" "$summary"
   done
   printf '\n'
-  printf '%s\n' 'Each command supports -h/--help for detailed usage.'
+  printf '%s\n' 'Each command supports -h/--help plus -d/--debug and -t/--trace for log verbosity.'
   printf '%s\n' 'Run `zshmq help <command>` or `zshmq <command> --help` for command-specific documentation.'
 }
 

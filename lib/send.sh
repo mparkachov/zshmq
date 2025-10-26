@@ -8,6 +8,8 @@
 # @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the bus so matching subscribers receive it.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: --topic TOPIC      Explicit topic to apply instead of inferring from MESSAGE (before the first colon).
+# @option: -d, --debug        Enable DEBUG log level.
+# @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 

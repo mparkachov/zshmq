@@ -115,7 +115,7 @@ zshmq ctx_new
 ```
 Creates `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`), recreates the main FIFO bus, and truncates the subscription state so every session starts from a clean slate. Re-run this command whenever you need to reset the environment.
 
-List available commands (each supports `-h` / `--help` for details):
+List available commands (each supports `-h/--help` plus `-d/--debug` and `-t/--trace` for logging control):
 ```sh
 zshmq --help
 ```
@@ -130,6 +130,7 @@ zshmq help ctx_new
 zshmq start
 ```
 Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx_new` to have prepared the runtime directory first and will exit with an error if the context is missing.
+Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
 
 ### Step 2: Subscribe to a Topic
 ```bash
@@ -180,7 +181,7 @@ Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROO
 Command	Description
 zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
 zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
-zshmq start	Start the dispatcher process (requires ctx_new to have initialised the runtime)
+zshmq start	Start the dispatcher process (use --foreground to stay attached to the terminal)
 zshmq send <message>	Publish a message (infers the topic from "<topic>: <message>" or use --topic)
 zshmq sub <pattern>	Subscribe to matching messages
 zshmq list	Show active subscribers
@@ -195,8 +196,7 @@ ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx_new
 ZSHMQ_BUS	/tmp/zshmq/bus	Main FIFO path
 ZSHMQ_STATE	/tmp/zshmq/state	Subscription table
 ZSHMQ_DISPATCH_PID	/tmp/zshmq/dispatcher.pid	PID file tracked by start/stop
-ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
-ZSHMQ_DEBUG	0	Verbose mode flag
+ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by -d/--debug and -t/--trace
 
 ### Example Session
 

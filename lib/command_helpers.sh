@@ -60,6 +60,8 @@ zshmq_parser_defaults() {
   setup REST help:usage -- "Usage: ${usage_text}" ''
   msg -- 'Options:'
   flag ZSHMQ_HELP -h --help -- 'Display command documentation and exit.'
+  flag ZSHMQ_DEBUG -d --debug -- 'Enable DEBUG log level.'
+  flag ZSHMQ_TRACE -t --trace -- 'Enable TRACE log level.'
 }
 
 zshmq_print_command_help() {
@@ -102,10 +104,19 @@ zshmq_eval_parser() {
     ZSHMQ_PARSER_USAGE="zshmq $command"
   fi
   unset ZSHMQ_HELP ||:
+  unset ZSHMQ_DEBUG ||:
+  unset ZSHMQ_TRACE ||:
   # shellcheck disable=SC2039
   eval "$(getoptions $parser_fn zshmq_parse_runner)" || return 1
   zshmq_parse_runner "$@"
   ZSHMQ_REST=$REST
+  if [ "${ZSHMQ_TRACE:-0}" = "1" ]; then
+    ZSHMQ_LOG_LEVEL=TRACE
+  elif [ "${ZSHMQ_DEBUG:-0}" = "1" ]; then
+    ZSHMQ_LOG_LEVEL=DEBUG
+  fi
+  : "${ZSHMQ_LOG_LEVEL:=INFO}"
+  export ZSHMQ_LOG_LEVEL
   if [ "${ZSHMQ_HELP:-0}" = "1" ]; then
     zshmq_print_command_help "$command"
     return 2

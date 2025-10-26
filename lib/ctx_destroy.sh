@@ -7,6 +7,8 @@
 # @summary: Remove the runtime directory (default: /tmp/zshmq) and its runtime files.
 # @description: Delete the bus FIFO and state file created by ctx_new and remove the runtime directory if it is now empty.
 # @option: -p, --path PATH    Target directory to remove (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -d, --debug        Enable DEBUG log level.
+# @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 

@@ -7,12 +7,16 @@
 # @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
 # @description: Validate an existing runtime directory created by ctx_new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
 # @option: -p, --path PATH    Runtime directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -f, --foreground   Run the dispatcher in the foreground.
+# @option: -d, --debug        Enable DEBUG log level.
+# @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 
 start_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to initialise'
+  flag START_FOREGROUND -f --foreground -- 'Run the dispatcher in the foreground'
 }
 
 zshmq_dispatch_loop() {
@@ -86,6 +90,8 @@ start() {
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
+  unset START_FOREGROUND ||:
+
   set +e
   zshmq_eval_parser start start_parser_definition "$@"
   status=$?
@@ -151,6 +157,40 @@ start() {
       return 1
     fi
     rm -f "$pid_path"
+  fi
+
+  if [ "${START_FOREGROUND:-0}" = "1" ]; then
+    zshmq_dispatch_loop "$bus_path" "$state_path" &
+    dispatcher_pid=$!
+    printf '%s\n' "$dispatcher_pid" > "$pid_path"
+    zshmq_log_info 'Dispatcher started (pid=%s)' "$dispatcher_pid"
+
+    start_foreground_cleaned=0
+
+    start_foreground_cleanup() {
+      if [ "${start_foreground_cleaned}" -eq 1 ]; then
+        return 0
+      fi
+      start_foreground_cleaned=1
+      trap - INT TERM HUP EXIT
+      if [ -n "${dispatcher_pid:-}" ] && kill -0 "$dispatcher_pid" 2>/dev/null; then
+        kill "$dispatcher_pid" 2>/dev/null || :
+        wait "$dispatcher_pid" 2>/dev/null || :
+      else
+        wait "$dispatcher_pid" 2>/dev/null || :
+      fi
+      rm -f "$pid_path"
+    }
+
+    trap 'start_foreground_cleanup; exit 130' INT
+    trap 'start_foreground_cleanup; exit 143' TERM
+    trap 'start_foreground_cleanup; exit 129' HUP
+    trap 'start_foreground_cleanup' EXIT
+
+    wait "$dispatcher_pid"
+    wait_status=$?
+    start_foreground_cleanup
+    return "$wait_status"
   fi
 
   zshmq_dispatch_loop "$bus_path" "$state_path" &

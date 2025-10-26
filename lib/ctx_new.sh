@@ -7,6 +7,8 @@
 # @summary: Bootstrap the runtime directory (default: /tmp/zshmq) and transport primitives.
 # @description: Ensure the runtime root exists, reset the subscription state file, and recreate the main FIFO bus so other zshmq commands start from a clean slate.
 # @option: -p, --path PATH    Target directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -d, --debug        Enable DEBUG log level.
+# @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 
