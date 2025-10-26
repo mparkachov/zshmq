@@ -15,7 +15,9 @@ Describe 'ctx_new'
     The status should be success
     The stdout should equal "$ZSHMQ_CTX_ROOT"
     The path "$ZSHMQ_CTX_ROOT" should exist
+    The path "$ZSHMQ_CTX_ROOT/bus" should be pipe
     The path "$ZSHMQ_CTX_ROOT/state" should be file
+    The path "$ZSHMQ_CTX_ROOT/state" should be empty file
   End
 
   It 'honours an explicit --path argument'
@@ -24,16 +26,32 @@ Describe 'ctx_new'
     The status should be success
     The stdout should equal "$custom_path"
     The path "$custom_path" should exist
+    The path "$custom_path/bus" should be pipe
     The path "$custom_path/state" should be file
+    The path "$custom_path/state" should be empty file
   End
 
   It 'does not fail if the target already exists'
     preexisting="$SHELLSPEC_TMPDIR/existing"
+    rm -rf "$preexisting"
     mkdir -p "$preexisting"
-    : > "$preexisting/state"
+    mkfifo "$preexisting/bus"
+    printf '%s\n' 'pattern|fifo' > "$preexisting/state"
     When call ctx_new --path "$preexisting"
     The status should be success
     The stdout should equal "$preexisting"
+    The path "$preexisting/bus" should be pipe
+    The path "$preexisting/state" should be empty file
+  End
+
+  It 'fails when a non-fifo bus path already exists'
+    preexisting="$SHELLSPEC_TMPDIR/existing_file"
+    rm -rf "$preexisting"
+    mkdir -p "$preexisting"
+    : > "$preexisting/bus"
+    When run ctx_new --path "$preexisting"
+    The status should be failure
+    The stderr should include 'bus path is not a FIFO'
   End
 
   It 'fails when unexpected positional arguments are provided'

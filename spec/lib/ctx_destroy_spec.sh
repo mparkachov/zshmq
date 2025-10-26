@@ -28,6 +28,7 @@ Describe 'ctx_destroy'
     The status should be success
     The stdout should equal "$target"
     The path "$target/state" should not exist
+    The path "$target/bus" should not exist
     The path "$target" should exist
   End
 

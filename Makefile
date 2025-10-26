@@ -20,30 +20,20 @@ test: bootstrap $(SHELLSPEC)
 .PHONY: release
 release: bootstrap $(ZSHMQ_BIN)
 	@if [ -f "$(VERSION_FILE)" ]; then \
-		current=$$(tr -d '\r\n' < "$(VERSION_FILE)"); \
+		version=$$(tr -d '\r\n' < "$(VERSION_FILE)"); \
 	else \
-		current=0.0.0; \
+		version=0.0.0; \
 	fi; \
-	major=$${current%%.*}; \
-	rest=$${current#*.}; \
-	if [ "$$rest" = "$$current" ]; then \
-		minor=0; patch=0; \
-	else \
-		minor=$${rest%%.*}; \
-		patch_part=$${rest#*.}; \
-		[ "$$patch_part" = "$$rest" ] && patch_part=0; \
-		patch=$$patch_part; \
+	if [ -z "$$version" ]; then \
+		printf '%s\n' 'VERSION file is empty; set a semantic version before releasing.' >&2; \
+		exit 1; \
 	fi; \
-	major=$${major:-0}; minor=$${minor:-0}; patch=$${patch:-0}; \
-	patch=$$((patch + 1)); \
-	new_version="$$major.$$minor.$$patch"; \
-	printf '%s\n' "$$new_version" > "$(VERSION_FILE)"; \
-	printf 'Building release %s\n' "$$new_version" >&2; \
+	printf 'Building release %s\n' "$$version" >&2; \
 	tmp=$$(mktemp); \
 	{ \
 		printf '%s\n' '#!/usr/bin/env sh'; \
 		printf 'ZSHMQ_EMBEDDED=1\n'; \
-		printf 'ZSHMQ_VERSION=%s\n' "$$new_version"; \
+		printf 'ZSHMQ_VERSION=%s\n' "$$version"; \
 		for vendor in vendor/getoptions/lib/getoptions_base.sh vendor/getoptions/lib/getoptions_abbr.sh vendor/getoptions/lib/getoptions_help.sh; do \
 			printf '\n'; \
 			sed '/^#!\/usr\/bin\/env sh/d' "$$vendor"; \

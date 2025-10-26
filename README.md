@@ -97,11 +97,11 @@ make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/repo
 ```
 The report will be written to `tmp/reports/results_junit.xml` and published automatically by CI.
 
-Build a release artifact and bump the patch version:
+Build a release artifact using the version recorded in `VERSION` (update the file manually when bumping releases):
 ```sh
 make release
 ```
-This creates a self-contained `zshmq` that embeds all library code and updates `VERSION`.
+This creates a self-contained `zshmq` that embeds all library code without modifying `VERSION`.
 
 ### Supported Make Targets
 - `make bootstrap`
@@ -113,7 +113,7 @@ This creates a self-contained `zshmq` that embeds all library code and updates `
 ```sh
 zshmq ctx_new
 ```
-Creates `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`) and prepares the state file.
+Creates `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`), recreates the main FIFO bus, and truncates the subscription state so every session starts from a clean slate. Re-run this command whenever you need to reset the environment.
 
 List available commands (each supports `-h` / `--help` for details):
 ```sh
@@ -125,19 +125,13 @@ Show command-specific usage:
 zshmq help ctx_new
 ```
 
-### Step 1: Initialize
-```bash
-zshmq init
-```
-Creates /tmp/zshmq/bus and the state file for subscriptions.
-
-### Step 2: Start Dispatcher
+### Step 1: Start Dispatcher
 ```bash
 zshmq dispatch
 ```
 Runs the router that listens for messages and subscription updates.
 
-### Step 3: Subscribe to a Topic
+### Step 2: Subscribe to a Topic
 ```bash
 zshmq sub '^ALERT'
 ```
@@ -146,14 +140,14 @@ Creates /tmp/zshmq/sub.<pid> and prints matching messages:
 Subscribed to '^ALERT'
 ALERT: CPU overload
 
-### Step 4: Publish Messages
+### Step 3: Publish Messages
 ```bash
 zshmq pub "ALERT: CPU overload"
 zshmq pub "INFO: Cooling active"
 ```
 Messages are routed to subscribers with matching filters.
 
-### Step 5: List Active Subscribers
+### Step 4: List Active Subscribers
 ```bash
 zshmq list
 ```
@@ -163,19 +157,19 @@ PID     FIFO                   PATTERN
 2314    /tmp/zshmq/sub.2314    ^ALERT
 2318    /tmp/zshmq/sub.2318    ^INFO
 
-### Step 6: Unsubscribe
+### Step 5: Unsubscribe
 ```bash
 zshmq unsub
 ```
 Removes your FIFO and deregisters from the dispatcher.
 
-### Step 7: Stop Dispatcher
+### Step 6: Stop Dispatcher
 ```bash
 zshmq stop
 ```
 Gracefully terminates the router and cleans up /tmp/zshmq/bus.
 
-### Step 8: Destroy Runtime (optional)
+### Step 7: Destroy Runtime (optional)
 ```bash
 zshmq ctx_destroy
 ```
@@ -183,9 +177,8 @@ Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROO
 
 ### Command Reference
 Command	Description
-zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its state file
-zshmq ctx_new	Create the runtime directory structure (default: /tmp/zshmq)
-zshmq init	Initialize FIFO bus and state file
+zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
+zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
 zshmq dispatch	Start the dispatcher process
 zshmq pub <message>	Publish a message
 zshmq sub <pattern>	Subscribe to matching messages

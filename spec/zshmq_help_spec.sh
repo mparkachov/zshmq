@@ -3,8 +3,8 @@ Describe 'zshmq --help'
     When run ./bin/zshmq.sh --help
     The status should be success
     The stdout should include 'Commands:'
-    The stdout should include 'ctx_new - Bootstrap the runtime directory (default: /tmp/zshmq).'
-    The stdout should include 'ctx_destroy - Remove the runtime directory (default: /tmp/zshmq) and its state file.'
+    The stdout should include 'ctx_new - Bootstrap the runtime directory (default: /tmp/zshmq) and transport primitives.'
+    The stdout should include 'ctx_destroy - Remove the runtime directory (default: /tmp/zshmq) and its runtime files.'
     The stdout should include 'Each command supports -h/--help for detailed usage.'
     The stdout should not include 'Command: ctx_new'
     The stdout should not include 'Command: ctx_destroy'

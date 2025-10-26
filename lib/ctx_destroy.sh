@@ -4,8 +4,8 @@
 #/**
 # ctx_destroy - Remove the runtime directory created by ctx_new.
 # @usage: zshmq ctx_destroy [--path PATH]
-# @summary: Remove the runtime directory (default: /tmp/zshmq) and its state file.
-# @description: Delete the state file created by ctx_new and remove the runtime directory if it is now empty.
+# @summary: Remove the runtime directory (default: /tmp/zshmq) and its runtime files.
+# @description: Delete the bus FIFO and state file created by ctx_new and remove the runtime directory if it is now empty.
 # @option: -p, --path PATH    Target directory to remove (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -h, --help         Display command documentation and exit.
 #*/
@@ -70,8 +70,15 @@ ctx_destroy() {
   esac
 
   if [ -d "$target" ]; then
-    if [ -f "${target%/}/state" ]; then
-      rm -f "${target%/}/state"
+    runtime_root=${target%/}
+    state_path=${ZSHMQ_STATE:-${runtime_root}/state}
+    bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
+
+    if [ -f "$state_path" ]; then
+      rm -f "$state_path"
+    fi
+    if [ -p "$bus_path" ] || [ -f "$bus_path" ]; then
+      rm -f "$bus_path"
     fi
     remaining=$(find "$target" -mindepth 1 -maxdepth 1 -not -name '.' -not -name '..' -print -quit 2>/dev/null || :)
     if [ -z "${remaining:-}" ]; then

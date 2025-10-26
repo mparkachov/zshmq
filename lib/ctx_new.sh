@@ -4,8 +4,8 @@
 #/**
 # ctx_new - Bootstrap the runtime directory used by zshmq commands.
 # @usage: zshmq ctx_new [--path PATH]
-# @summary: Bootstrap the runtime directory (default: /tmp/zshmq).
-# @description: Bootstrap the runtime directory so other zshmq commands can operate on a known path.
+# @summary: Bootstrap the runtime directory (default: /tmp/zshmq) and transport primitives.
+# @description: Ensure the runtime root exists, reset the subscription state file, and recreate the main FIFO bus so other zshmq commands start from a clean slate.
 # @option: -p, --path PATH    Target directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -h, --help         Display command documentation and exit.
 #*/
@@ -63,14 +63,72 @@ ctx_new() {
     return 1
   fi
 
+  case $target in
+    /|'')
+      printf '%s\n' 'ctx_new: refusing to operate on root directory' >&2
+      return 1
+      ;;
+  esac
+
   if [ ! -d "$target" ]; then
     mkdir -p "$target"
   fi
 
-  state_file="${target%/}/state"
-  if [ ! -f "$state_file" ]; then
-    : > "$state_file"
+  runtime_root=${target%/}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/state}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
+
+  if [ -z "$state_path" ]; then
+    printf '%s\n' 'ctx_new: state path is empty' >&2
+    return 1
   fi
+
+  if [ -z "$bus_path" ]; then
+    printf '%s\n' 'ctx_new: bus path is empty' >&2
+    return 1
+  fi
+
+  case $state_path in
+    */*)
+      state_dir=${state_path%/*}
+      ;;
+    *)
+      state_dir=.
+      ;;
+  esac
+  if [ "$state_dir" != "." ] && [ ! -d "$state_dir" ]; then
+    mkdir -p "$state_dir"
+  fi
+
+  if [ -e "$state_path" ] && [ ! -f "$state_path" ]; then
+    printf 'ctx_new: state path is not a regular file: %s\n' "$state_path" >&2
+    return 1
+  fi
+
+  : > "$state_path"
+
+  case $bus_path in
+    */*)
+      bus_dir=${bus_path%/*}
+      ;;
+    *)
+      bus_dir=.
+      ;;
+  esac
+  if [ "$bus_dir" != "." ] && [ ! -d "$bus_dir" ]; then
+    mkdir -p "$bus_dir"
+  fi
+
+  if [ -e "$bus_path" ]; then
+    if [ -p "$bus_path" ]; then
+      rm -f "$bus_path"
+    else
+      printf 'ctx_new: bus path is not a FIFO: %s\n' "$bus_path" >&2
+      return 1
+    fi
+  fi
+
+  mkfifo "$bus_path"
 
   printf '%s\n' "$target"
 }
