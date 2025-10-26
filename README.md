@@ -129,7 +129,7 @@ zshmq help ctx_new
 ```bash
 zshmq start
 ```
-Runs the router that listens for messages and subscription updates.
+Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx_new` to have prepared the runtime directory first and will exit with an error if the context is missing.
 
 ### Step 2: Subscribe to a Topic
 ```bash
@@ -179,7 +179,7 @@ Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROO
 Command	Description
 zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
 zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
-zshmq start	Start the dispatcher process
+zshmq start	Start the dispatcher process (requires ctx_new to have initialised the runtime)
 zshmq pub <message>	Publish a message
 zshmq sub <pattern>	Subscribe to matching messages
 zshmq list	Show active subscribers

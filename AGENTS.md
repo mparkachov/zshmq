@@ -3,6 +3,8 @@
 ## Project Structure & Module Organization
 Keep the command-line entrypoint in the repository root during development, but ensure the release-ready binary lands in `bin/`. Place reusable logic in `lib/`, one function per file, e.g., `lib/start.sh` and `lib/publisher.sh`. Specs live under `spec/` following ShellSpec conventions (`spec/lib/start_spec.sh`). Temporary assets belong in `tmp/` and should be ignored by Git. Update `README.md` and `AGENT.md` whenever the public interface or build contract changes. Configure every tool dependency as a Git submodule and avoid assuming anything beyond a POSIX shell is installed on the system.
 
+Do not hand-edit the bundled `./zshmq` release script. Always regenerate it with `make release` after curating `VERSION` so the embedded code stays in sync with `lib/`.
+
 ## Build, Test, and Development Commands
 Expose every build, package, and test workflow through POSIX-compliant `make` targets (strictly POSIX make syntax - no GNU extensions). Provide at minimum `make build` to emit `bin/zshmq.sh` and `make test` to run the full ShellSpec suite; add focused targets or variables for module-level specs when useful. The underlying scripts may still live in `scripts/`, but users should be able to rely on `make` alone. Verify the CLI manually via `./bin/zshmq.sh <command> ...` before shipping a change.
 

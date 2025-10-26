@@ -20,6 +20,7 @@ Describe 'start'
   AfterEach 'after_each'
 
   It 'starts the dispatcher and records its PID'
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be success
     The stdout should include 'Dispatcher started (pid='
@@ -29,9 +30,16 @@ Describe 'start'
   End
 
   It 'fails when the dispatcher is already running'
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
     start --path "$ZSHMQ_CTX_ROOT" >/dev/null
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be failure
     The stderr should include 'dispatcher already running'
+  End
+
+  It 'fails when the runtime directory has not been initialised'
+    When run start --path "$ZSHMQ_CTX_ROOT"
+    The status should be failure
+    The stderr should include 'runtime directory not found'
   End
 End

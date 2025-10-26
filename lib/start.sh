@@ -5,7 +5,7 @@
 # start - Launch the dispatcher loop for zshmq.
 # @usage: zshmq start [--path PATH]
 # @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
-# @description: Ensure the runtime directory is initialised, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
+# @description: Validate an existing runtime directory created by ctx_new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
 # @option: -p, --path PATH    Runtime directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -h, --help         Display command documentation and exit.
 #*/
@@ -124,12 +124,15 @@ start() {
       ;;
   esac
 
-  ctx_new --path "$target" >/dev/null
-
   runtime_root=${target%/}
   state_path=${ZSHMQ_STATE:-${runtime_root}/state}
   bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+
+  if [ ! -d "$target" ]; then
+    printf 'start: runtime directory not found: %s\n' "$target" >&2
+    return 1
+  fi
 
   if [ ! -p "$bus_path" ]; then
     printf 'start: bus FIFO not found at %s\n' "$bus_path" >&2

@@ -47,7 +47,13 @@ release: bootstrap $(ZSHMQ_BIN)
 	} > "$$tmp"; \
 	chmod +x "$$tmp"; \
 	mv "$$tmp" "$(RELEASE_ARTIFACT)"; \
-	chmod +x "$(RELEASE_ARTIFACT)"
+	chmod +x "$(RELEASE_ARTIFACT)"; \
+	if git rev-parse "v$$version" >/dev/null 2>&1; then \
+		printf 'Tag v%s already exists; skipping tag creation.\n' "$$version" >&2; \
+	else \
+		echo git tag "v$$version"; \
+		printf 'Created tag v%s\n' "$$version" >&2; \
+	fi
 
 $(SHELLSPEC):
 	@printf '%s\n' 'ShellSpec submodule missing. Run git submodule update --init --recursive.' >&2
