@@ -24,11 +24,13 @@ Describe 'ctx_destroy'
     target="$SHELLSPEC_TMPDIR/ctx_destroy_with_data"
     ctx_new --path "$target" >/dev/null
     touch "$target/data"
+    printf '%s\n' '999' > "$target/dispatcher.pid"
     When call ctx_destroy --path "$target"
     The status should be success
     The stdout should equal "$target"
     The path "$target/state" should not exist
     The path "$target/bus" should not exist
+    The path "$target/dispatcher.pid" should not exist
     The path "$target" should exist
   End
 

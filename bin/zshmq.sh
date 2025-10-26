@@ -30,6 +30,10 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   . "${ZSHMQ_ROOT}/lib/ctx_new.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/ctx_destroy.sh"
+  # shellcheck disable=SC1091
+  . "${ZSHMQ_ROOT}/lib/start.sh"
+  # shellcheck disable=SC1091
+  . "${ZSHMQ_ROOT}/lib/stop.sh"
 fi
 
 zshmq_command_list() {
@@ -98,6 +102,12 @@ case $command_name in
     ;;
   ctx_destroy)
     ctx_destroy "$@"
+    ;;
+  start)
+    start "$@"
+    ;;
+  stop)
+    stop "$@"
     ;;
   *)
     printf 'zshmq: unknown command -- %s\n' "$command_name" >&2

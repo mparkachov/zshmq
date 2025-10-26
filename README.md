@@ -13,7 +13,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
-- **ZeroMQ-like CLI:** Familiar commands (`pub`, `sub`, `dispatch`, etc.).
+- **ZeroMQ-like CLI:** Familiar commands (`pub`, `sub`, `start`, etc.).
 - **Tiny:** A single portable shell script.
 
 ---
@@ -127,7 +127,7 @@ zshmq help ctx_new
 
 ### Step 1: Start Dispatcher
 ```bash
-zshmq dispatch
+zshmq start
 ```
 Runs the router that listens for messages and subscription updates.
 
@@ -179,7 +179,7 @@ Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROO
 Command	Description
 zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
 zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
-zshmq dispatch	Start the dispatcher process
+zshmq start	Start the dispatcher process
 zshmq pub <message>	Publish a message
 zshmq sub <pattern>	Subscribe to matching messages
 zshmq list	Show active subscribers
@@ -193,13 +193,14 @@ Variable	Default	Description
 ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx_new
 ZSHMQ_BUS	/tmp/zshmq/bus	Main FIFO path
 ZSHMQ_STATE	/tmp/zshmq/state	Subscription table
+ZSHMQ_DISPATCH_PID	/tmp/zshmq/dispatcher.pid	PID file tracked by start/stop
 ZSHMQ_DEBUG	0	Verbose mode flag
 
 ### Example Session
 
 Terminal 1 - Dispatcher
 ```bash
-zshmq dispatch
+zshmq start
 ```
 
 Terminal 2 - Subscriber

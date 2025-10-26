@@ -73,12 +73,16 @@ ctx_destroy() {
     runtime_root=${target%/}
     state_path=${ZSHMQ_STATE:-${runtime_root}/state}
     bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
+    pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
     if [ -f "$state_path" ]; then
       rm -f "$state_path"
     fi
     if [ -p "$bus_path" ] || [ -f "$bus_path" ]; then
       rm -f "$bus_path"
+    fi
+    if [ -f "$pid_path" ]; then
+      rm -f "$pid_path"
     fi
     remaining=$(find "$target" -mindepth 1 -maxdepth 1 -not -name '.' -not -name '..' -print -quit 2>/dev/null || :)
     if [ -z "${remaining:-}" ]; then
