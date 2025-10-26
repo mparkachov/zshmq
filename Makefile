@@ -38,7 +38,7 @@ release: bootstrap $(ZSHMQ_BIN)
 			printf '\n'; \
 			sed '/^#!\/usr\/bin\/env sh/d' "$$vendor"; \
 		done; \
-		for lib in lib/command_helpers.sh lib/ctx_new.sh lib/ctx_destroy.sh lib/start.sh lib/stop.sh; do \
+		for lib in lib/command_helpers.sh lib/ctx_new.sh lib/ctx_destroy.sh lib/start.sh lib/stop.sh lib/send.sh; do \
 			printf '\n'; \
 			sed '/^#!\/usr\/bin\/env sh/d' "$$lib"; \
 		done; \

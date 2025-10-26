@@ -13,7 +13,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
-- **ZeroMQ-like CLI:** Familiar commands (`pub`, `sub`, `start`, etc.).
+- **ZeroMQ-like CLI:** Familiar commands (`send`, `sub`, `start`, etc.).
 - **Tiny:** A single portable shell script.
 
 ---
@@ -142,10 +142,11 @@ ALERT: CPU overload
 
 ### Step 3: Publish Messages
 ```bash
-zshmq pub "ALERT: CPU overload"
-zshmq pub "INFO: Cooling active"
+zshmq send "ALERT: CPU overload"
+zshmq send "INFO: Cooling active"
 ```
 Messages are routed to subscribers with matching filters.
+`send` infers the topic from the text before the first colon (`ALERT` or `INFO` above); pass `--topic <name>` to override the inference when your payload lacks a colon.
 
 ### Step 4: List Active Subscribers
 ```bash
@@ -180,7 +181,7 @@ Command	Description
 zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
 zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
 zshmq start	Start the dispatcher process (requires ctx_new to have initialised the runtime)
-zshmq pub <message>	Publish a message
+zshmq send <message>	Publish a message (infers the topic from "<topic>: <message>" or use --topic)
 zshmq sub <pattern>	Subscribe to matching messages
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber
@@ -210,8 +211,8 @@ zshmq sub '^ALERT'
 
 Terminal 3 - Publisher
 ```bash
-zshmq pub "ALERT: Disk full"
-zshmq pub "INFO: Backup started"
+zshmq send "ALERT: Disk full"
+zshmq send "INFO: Backup started"
 ```
 
 Subscriber Output
@@ -256,6 +257,6 @@ MIT License (c) 2025 - Maxim Parkachov
 
 ## Inspiration
 
-[ZeroMQ](https://zeromq.org/) - distributed messaging patterns
-[Plan 9 Plumber](https://9p.io/sys/doc/plumb.html) - pattern-based routing
-[The Unix philosophy](https://en.wikipedia.org/wiki/Unix_philosophy) - composability through pipes
+- [ZeroMQ](https://zeromq.org/) - distributed messaging patterns
+- [Plan 9 Plumber](https://9p.io/sys/doc/plumb.html) - pattern-based routing
+- [The Unix philosophy](https://en.wikipedia.org/wiki/Unix_philosophy) - composability through pipes

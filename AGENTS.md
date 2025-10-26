@@ -21,7 +21,7 @@ Each command module must include a Javadoc-style header (`#/** ... */`) containi
 Write a ShellSpec file for every module under `lib/`. Name contexts after the command or function (`Describe dispatcher_loop`). Use doubles and fixtures in `spec/support/` instead of touching `/tmp`. Add regression specs for bugs before fixing them. Aim to cover both happy paths and failure modes such as FIFO contention or missing environment variables.
 
 ## Commit & Pull Request Guidelines
-Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh pub "ALERT: test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
+Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh send "ALERT: test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
 
 ## Security & Environment Tips
 Never commit actual FIFOs or files created in `/tmp`. Sanitize topic patterns received from users before interpolation. When testing locally, override `ZSHMQ_BUS` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_BUS=$PWD/tmp/bus`). Clean up stray FIFOs with `./bin/zshmq.sh stop` or manual `rm` to prevent resource leaks.
