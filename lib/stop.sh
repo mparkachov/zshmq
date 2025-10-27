@@ -75,20 +75,20 @@ stop() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
 
   if [ ! -f "$pid_path" ]; then
-    zshmq_log_info 'Dispatcher is not running.'
+    zshmq_log_debug 'Dispatcher is not running.'
     return 0
   fi
 
   dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
   if [ -z "$dispatcher_pid" ]; then
     rm -f "$pid_path"
-    zshmq_log_info 'Dispatcher is not running.'
+    zshmq_log_debug 'Dispatcher is not running.'
     return 0
   fi
 
   if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
     rm -f "$pid_path"
-    zshmq_log_info 'Dispatcher is not running.'
+    zshmq_log_debug 'Dispatcher is not running.'
     return 0
   fi
 
@@ -107,7 +107,7 @@ stop() {
   fi
 
   rm -f "$pid_path"
-  zshmq_log_info 'Dispatcher stopped (pid=%s)' "$dispatcher_pid"
+  zshmq_log_debug 'Dispatcher stopped (pid=%s)' "$dispatcher_pid"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

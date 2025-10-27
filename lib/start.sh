@@ -19,6 +19,39 @@ start_parser_definition() {
   flag START_FOREGROUND -f --foreground -- 'Run the dispatcher in the foreground'
 }
 
+dispatcher_extract_fifo_pid() {
+  fifo_path=$1
+  name=${fifo_path##*/}
+  pid=${name##*.}
+  case $pid in
+    ''|*[!0-9]*)
+      printf '%s\n' ''
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$pid"
+  return 0
+}
+
+dispatcher_prune_state() {
+  state_path=$1
+  tmp_state="${state_path}.dispatcher.$$"
+  : > "$tmp_state"
+  while IFS='|' read -r pattern fifo || [ -n "$pattern" ]; do
+    [ -n "$pattern" ] || continue
+    [ -n "$fifo" ] || continue
+    fifo_pid=$(dispatcher_extract_fifo_pid "$fifo")
+    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
+      if [ -p "$fifo" ]; then
+        printf '%s|%s\n' "$pattern" "$fifo" >> "$tmp_state"
+      fi
+    else
+      rm -f "$fifo" 2>/dev/null || :
+    fi
+  done < "$state_path"
+  mv "$tmp_state" "$state_path"
+}
+
 zshmq_dispatch_loop() {
   bus_path=$1
   state_path=$2
@@ -56,14 +89,22 @@ zshmq_dispatch_loop() {
         topic=${payload%%|*}
         message=${payload#*|}
         if [ -f "$state_path" ] && [ -n "$topic" ]; then
-          zshmq_log_trace 'start: topic=%s message=%s' "$topic" "$message"
+          message_body=$message
+          if [ -s "$state_path" ]; then
+            dispatcher_prune_state "$state_path"
+          fi
+          zshmq_log_trace 'dispatcher: topic=%s message=%s' "$topic" "$message_body"
           while IFS='|' read -r pattern fifo_path; do
             [ -n "$pattern" ] || continue
             [ -n "$fifo_path" ] || continue
+            fifo_pid=$(dispatcher_extract_fifo_pid "$fifo_path")
+            if [ -z "$fifo_pid" ] || ! kill -0 "$fifo_pid" 2>/dev/null; then
+              continue
+            fi
             if printf '%s\n' "$topic" | grep -E -- "$pattern" >/dev/null 2>&1; then
               if [ -p "$fifo_path" ]; then
-                zshmq_log_trace 'start: deliver topic=%s message=%s pattern=%s fifo=%s' "$topic" "$message" "$pattern" "$fifo_path"
-                { printf '%s\n' "$message"; } >> "$fifo_path" 2>/dev/null || :
+                zshmq_log_trace 'dispatcher: deliver topic=%s message=%s pattern=%s fifo=%s' "$topic" "$message_body" "$pattern" "$fifo_path"
+                { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
               fi
             fi
           done < "$state_path"
@@ -155,7 +196,7 @@ start() {
   if [ -f "$pid_path" ]; then
     existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
     if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-      zshmq_log_info 'start: dispatcher already running (pid=%s)' "$existing_pid"
+      zshmq_log_debug 'start: dispatcher already running (pid=%s)' "$existing_pid"
       return 1
     fi
     rm -f "$pid_path"
@@ -165,7 +206,7 @@ start() {
     zshmq_dispatch_loop "$bus_path" "$state_path" &
     dispatcher_pid=$!
     printf '%s\n' "$dispatcher_pid" > "$pid_path"
-    zshmq_log_info 'Dispatcher started (pid=%s)' "$dispatcher_pid"
+    zshmq_log_debug 'Dispatcher started (pid=%s)' "$dispatcher_pid"
 
     start_foreground_cleaned=0
 
@@ -198,7 +239,7 @@ start() {
   zshmq_dispatch_loop "$bus_path" "$state_path" &
   dispatcher_pid=$!
   printf '%s\n' "$dispatcher_pid" > "$pid_path"
-  zshmq_log_info 'Dispatcher started (pid=%s)' "$dispatcher_pid"
+  zshmq_log_debug 'Dispatcher started (pid=%s)' "$dispatcher_pid"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

@@ -9,7 +9,7 @@ Describe 'stop'
     export ZSHMQ_ROOT="$PWD"
     export ZSHMQ_CTX_ROOT="$SHELLSPEC_TMPDIR/zshmq"
     rm -rf "$ZSHMQ_CTX_ROOT"
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
   }
 
   after_each() {
@@ -24,13 +24,13 @@ Describe 'stop'
     pid_before=$(cat "$ZSHMQ_CTX_ROOT/dispatcher.pid")
     When run stop --path "$ZSHMQ_CTX_ROOT"
     The status should be success
-    The stderr should include "[INFO] Dispatcher stopped (pid=$pid_before)"
+    The stderr should equal ''
     The path "$ZSHMQ_CTX_ROOT/dispatcher.pid" should not exist
   End
 
   It 'succeeds even when the dispatcher is not running'
     When run stop --path "$ZSHMQ_CTX_ROOT"
     The status should be success
-    The stderr should include '[INFO] Dispatcher is not running.'
+    The stderr should equal ''
   End
 End

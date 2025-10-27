@@ -132,7 +132,7 @@ ctx_new() {
 
   mkfifo "$bus_path"
 
-  printf '%s\n' "$target"
+  zshmq_log_debug 'ctx_new: initialised runtime=%s' "$target"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

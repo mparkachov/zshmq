@@ -154,10 +154,6 @@ send() {
 
   zshmq_log_trace 'send: topic=%s message=%s' "$topic" "$body"
   printf 'PUB|%s|%s\n' "$topic" "$body" > "$bus_path"
-
-  if ! zshmq_log_should_emit TRACE; then
-    printf '%s|%s\n' "$topic" "$body"
-  fi
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

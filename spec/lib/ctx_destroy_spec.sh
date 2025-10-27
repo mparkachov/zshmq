@@ -14,21 +14,23 @@ Describe 'ctx_destroy'
 
   It 'removes the runtime directory created by ctx_new'
     target="$SHELLSPEC_TMPDIR/ctx_destroy_clean"
-    ctx_new --path "$target" >/dev/null
+    ctx_new --path "$target" >/dev/null 2>&1
     When call ctx_destroy --path "$target"
     The status should be success
-    The stdout should equal "$target"
+    The stdout should equal ''
+    The stderr should equal ''
     The path "$target" should not exist
   End
 
   It 'removes the state file but preserves other contents'
     target="$SHELLSPEC_TMPDIR/ctx_destroy_with_data"
-    ctx_new --path "$target" >/dev/null
+    ctx_new --path "$target" >/dev/null 2>&1
     touch "$target/data"
     printf '%s\n' '999' > "$target/dispatcher.pid"
     When call ctx_destroy --path "$target"
     The status should be success
-    The stdout should equal "$target"
+    The stdout should equal ''
+    The stderr should equal ''
     The path "$target/state" should not exist
     The path "$target/bus" should not exist
     The path "$target/dispatcher.pid" should not exist
@@ -39,6 +41,7 @@ Describe 'ctx_destroy'
     missing="$SHELLSPEC_TMPDIR/ctx_destroy_missing"
     When call ctx_destroy --path "$missing"
     The status should be success
-    The stdout should equal "$missing"
+    The stdout should equal ''
+    The stderr should equal ''
   End
 End

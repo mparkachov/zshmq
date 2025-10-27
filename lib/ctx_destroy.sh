@@ -92,7 +92,7 @@ ctx_destroy() {
     fi
   fi
 
-  printf '%s\n' "$target"
+  zshmq_log_debug 'ctx_destroy: cleaned runtime=%s' "$target"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

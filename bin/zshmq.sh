@@ -38,6 +38,8 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   . "${ZSHMQ_ROOT}/lib/stop.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/send.sh"
+  # shellcheck disable=SC1091
+  . "${ZSHMQ_ROOT}/lib/sub.sh"
 fi
 
 zshmq_command_list() {
@@ -116,6 +118,9 @@ case $command_name in
     ;;
   send)
     send "$@"
+    ;;
+  sub)
+    sub "$@"
     ;;
   *)
     printf 'zshmq: unknown command -- %s\n' "$command_name" >&2

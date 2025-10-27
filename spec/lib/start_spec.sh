@@ -21,21 +21,21 @@ Describe 'start'
   AfterEach 'after_each'
 
   It 'starts the dispatcher and records its PID'
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be success
-    The stderr should include '[INFO] Dispatcher started (pid='
+    The stderr should equal ''
     The path "$ZSHMQ_CTX_ROOT/dispatcher.pid" should be file
     The file "$ZSHMQ_CTX_ROOT/dispatcher.pid" should not be empty file
     The contents of file "$ZSHMQ_CTX_ROOT/dispatcher.pid" should match pattern '[0-9][0-9]*'
   End
 
   It 'fails when the dispatcher is already running'
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     start --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     When run start --path "$ZSHMQ_CTX_ROOT"
     The status should be failure
-    The stderr should include '[INFO] start: dispatcher already running (pid='
+    The stderr should equal ''
   End
 
   It 'fails when the runtime directory has not been initialised'
@@ -46,7 +46,7 @@ Describe 'start'
 
   start_trace_log_helper() {
     export ZSHMQ_LOG_LEVEL=TRACE
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     trace_log="$SHELLSPEC_TMPDIR/start_trace.log"
     : > "$trace_log"
 
@@ -57,7 +57,7 @@ Describe 'start'
 
     attempts=0
     while [ "$attempts" -lt 50 ]; do
-      if grep -F 'start: dispatch' "$trace_log" >/dev/null 2>&1; then
+      if grep -F 'dispatcher: topic=ALERT' "$trace_log" >/dev/null 2>&1; then
         break
       fi
       sleep 0.1
@@ -73,6 +73,6 @@ Describe 'start'
   It 'logs dispatched messages when trace logging is enabled'
     When run start_trace_log_helper
     The status should be success
-    The stdout should include '[TRACE] start: topic=ALERT message=system overload'
+    The stdout should include '[TRACE] dispatcher: topic=ALERT message=system overload'
   End
 End

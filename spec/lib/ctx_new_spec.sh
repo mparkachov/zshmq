@@ -14,7 +14,8 @@ Describe 'ctx_new'
   It 'creates the context directory and state file using defaults'
     When call ctx_new
     The status should be success
-    The stdout should equal "$ZSHMQ_CTX_ROOT"
+    The stdout should equal ''
+    The stderr should equal ''
     The path "$ZSHMQ_CTX_ROOT" should exist
     The path "$ZSHMQ_CTX_ROOT/bus" should be pipe
     The path "$ZSHMQ_CTX_ROOT/state" should be file
@@ -25,7 +26,8 @@ Describe 'ctx_new'
     custom_path="$SHELLSPEC_TMPDIR/custom"
     When call ctx_new --path "$custom_path"
     The status should be success
-    The stdout should equal "$custom_path"
+    The stdout should equal ''
+    The stderr should equal ''
     The path "$custom_path" should exist
     The path "$custom_path/bus" should be pipe
     The path "$custom_path/state" should be file
@@ -40,7 +42,8 @@ Describe 'ctx_new'
     printf '%s\n' 'pattern|fifo' > "$preexisting/state"
     When call ctx_new --path "$preexisting"
     The status should be success
-    The stdout should equal "$preexisting"
+    The stdout should equal ''
+    The stderr should equal ''
     The path "$preexisting/bus" should be pipe
     The path "$preexisting/state" should be empty file
   End

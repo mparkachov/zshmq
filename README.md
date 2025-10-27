@@ -136,10 +136,11 @@ Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current ter
 ```bash
 zshmq sub '^ALERT'
 ```
-Creates /tmp/zshmq/sub.<pid> and prints matching messages:
+Creates /tmp/zshmq/sub.<pid>. Enable `-d/--debug` if you need connection logs; matching messages stream to stdout:
 
-Subscribed to '^ALERT'
 ALERT: CPU overload
+
+The command runs until you interrupt it (Ctrl+C). On exit it deregisters from the dispatcher so future messages stop flowing to your FIFO.
 
 ### Step 3: Publish Messages
 ```bash
@@ -147,7 +148,7 @@ zshmq send "ALERT: CPU overload"
 zshmq send "INFO: Cooling active"
 ```
 Messages are routed to subscribers with matching filters.
-`send` infers the topic from the text before the first colon (`ALERT` or `INFO` above); pass `-T <name>` / `--topic <name>` to override the inference when your payload lacks a colon. When TRACE logging is enabled (`-t`/`--trace`), the routing tuple is suppressed on stdout—the TRACE log on stderr carries the payload details.
+`send` infers the topic from the text before the first colon (`ALERT` or `INFO` above); pass `-T <name>` / `--topic <name>` to override the inference when your payload lacks a colon. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
 
 ### Step 4: List Active Subscribers
 ```bash

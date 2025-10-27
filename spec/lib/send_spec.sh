@@ -30,7 +30,7 @@ Describe 'send'
   AfterEach 'after_each'
 
   ensure_dispatcher_running() {
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     SEND_SPEC_CAPTURE=${SEND_SPEC_CAPTURE:-"$SHELLSPEC_TMPDIR/send_capture"}
     : > "$SEND_SPEC_CAPTURE"
     {
@@ -45,12 +45,14 @@ Describe 'send'
     printf '%s\n' "$SEND_SPEC_DISPATCHER_PID" > "${ZSHMQ_CTX_ROOT}/dispatcher.pid"
   }
 
-  It 'publishes using an inferred topic and prints the routing tuple'
+  It 'publishes using an inferred topic'
     SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
     ensure_dispatcher_running
     When run send --path "$ZSHMQ_CTX_ROOT" 'ALERT: system overload'
     The status should be success
-    The stdout should equal 'ALERT|system overload'
+    The stdout should equal ''
+    The stderr should not include '[INFO] send: published'
+    The stderr should not include '[TRACE]'
     wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
     SEND_SPEC_READER_PID=
     The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|ALERT|system overload'
@@ -63,12 +65,13 @@ Describe 'send'
     The status should be success
     The stdout should equal ''
     The stderr should include '[TRACE] send: topic=ALERT message=system overload'
+    The stderr should not include '[INFO] send: published'
     wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
     SEND_SPEC_READER_PID=
   End
 
   It 'fails when the dispatcher is not running'
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null
+    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
     When run send --path "$ZSHMQ_CTX_ROOT" 'ALERT: no loop'
     The status should be failure
     The stderr should include '[ERROR] send: dispatcher is not running'
@@ -87,7 +90,8 @@ Describe 'send'
     ensure_dispatcher_running
     When run send --path "$ZSHMQ_CTX_ROOT" -T ALERT 'System overload'
     The status should be success
-    The stdout should equal 'ALERT|System overload'
+    The stdout should equal ''
+    The stderr should not include '[INFO] send: published'
     The stderr should not include '[TRACE]'
     wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
     SEND_SPEC_READER_PID=

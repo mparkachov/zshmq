@@ -17,8 +17,12 @@ Author POSIX-compliant shell (`#!/usr/bin/env sh`). Prefer two-space indentation
 
 Each command module must include a Javadoc-style header (`#/** ... */`) containing `@usage:`, `@summary:`, `@description:`, and `@option:` tags so the CLI `--help` aggregate remains accurate. Use the shared helpers (`zshmq_parser_defaults`, `zshmq_eval_parser`, `zshmq_print_command_help`) to attach the standard `-h/--help` parser along with the global `-d/--debug` and `-t/--trace` logging flags so new modules only specify command-specific parameters.
 
+All user-facing messaging should flow through the logging helpers (`zshmq_log_*`). Do not print acknowledgements or status lines directly to stdout; reserve stdout for command payloads (e.g., streamed subscriber messages) only.
+Favor `DEBUG` (or `TRACE`) for success-path diagnostics so that default INFO executions remain silent unless the user explicitly elevates verbosity.
+
 ## Testing Guidelines
 Write a ShellSpec file for every module under `lib/`. Name contexts after the command or function (`Describe dispatcher_loop`). Use doubles and fixtures in `spec/support/` instead of touching `/tmp`. Add regression specs for bugs before fixing them. Aim to cover both happy paths and failure modes such as FIFO contention or missing environment variables.
+Foreground-oriented workflows (e.g., `sub`, `start --foreground`) must be validated manually; avoid exercising long-lived streaming loops from ShellSpec to prevent hangs.
 
 ## Commit & Pull Request Guidelines
 Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh send "ALERT: test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
