@@ -1,7 +1,8 @@
 Describe 'start'
   Include lib/command_helpers.sh
   Include lib/logging.sh
-  Include lib/ctx_new.sh
+  Include lib/ctx.sh
+  Include lib/topic.sh
   Include lib/start.sh
   Include lib/stop.sh
 
@@ -21,39 +22,57 @@ Describe 'start'
   AfterEach 'after_each'
 
   It 'starts the dispatcher and records its PID'
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
-    When run start --path "$ZSHMQ_CTX_ROOT"
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+    When run start --path "$ZSHMQ_CTX_ROOT" --topic bus
     The status should be success
     The stderr should equal ''
-    The path "$ZSHMQ_CTX_ROOT/dispatcher.pid" should be file
-    The file "$ZSHMQ_CTX_ROOT/dispatcher.pid" should not be empty file
-    The contents of file "$ZSHMQ_CTX_ROOT/dispatcher.pid" should match pattern '[0-9][0-9]*'
+    The path "$ZSHMQ_CTX_ROOT/bus.pid" should be file
+    The file "$ZSHMQ_CTX_ROOT/bus.pid" should not be empty file
+    The contents of file "$ZSHMQ_CTX_ROOT/bus.pid" should match pattern '[0-9][0-9]*'
+  End
+
+  It 'requires a topic argument'
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+    When run start --path "$ZSHMQ_CTX_ROOT"
+    The status should be failure
+    The stderr should include '[ERROR] start: --topic is required'
   End
 
   It 'fails when the dispatcher is already running'
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
-    start --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
-    When run start --path "$ZSHMQ_CTX_ROOT"
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+    start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
+    When run start --path "$ZSHMQ_CTX_ROOT" --topic bus
     The status should be failure
     The stderr should equal ''
   End
 
   It 'fails when the runtime directory has not been initialised'
-    When run start --path "$ZSHMQ_CTX_ROOT"
+    When run start --path "$ZSHMQ_CTX_ROOT" --topic bus
     The status should be failure
     The stderr should include '[ERROR] start: runtime directory not found'
   End
 
+  It 'fails when the topic assets are missing'
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    When run start --path "$ZSHMQ_CTX_ROOT" --topic bus
+    The status should be failure
+    The stderr should include '[ERROR] start: bus FIFO not found'
+  End
+
   start_trace_log_helper() {
     export ZSHMQ_LOG_LEVEL=TRACE
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
     trace_log="$SHELLSPEC_TMPDIR/start_trace.log"
     : > "$trace_log"
 
-    zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/bus" "${ZSHMQ_CTX_ROOT}/state" 2>"$trace_log" &
+    zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/bus.topic" "${ZSHMQ_CTX_ROOT}/bus.state" 2>"$trace_log" &
     dispatcher_pid=$!
 
-    printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/bus"
+    printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/bus.topic"
 
     attempts=0
     while [ "$attempts" -lt 50 ]; do

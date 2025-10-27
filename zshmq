@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 ZSHMQ_EMBEDDED=1
-ZSHMQ_VERSION=0.0.2
+ZSHMQ_VERSION=0.0.3
 
 # shellcheck shell=sh disable=SC2016,SC2317
 # [getoptions] License: Creative Commons Zero v1.0 Universal
@@ -512,167 +512,228 @@ zshmq_log_fatal() {
 # shellcheck shell=sh
 
 #/**
-# ctx_new - Bootstrap the runtime directory used by zshmq commands.
-# @usage: zshmq ctx_new [--path PATH]
-# @summary: Bootstrap the runtime directory (default: /tmp/zshmq) and transport primitives.
-# @description: Ensure the runtime root exists, reset the subscription state file, and recreate the main FIFO bus so other zshmq commands start from a clean slate.
-# @option: -p, --path PATH    Target directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# ctx - Manage the runtime directory used by zshmq commands.
+# @usage: zshmq ctx <command> [options]
+# @summary: Manage the runtime directory (default: /tmp/zshmq).
+# @description: Provides subcommands to initialise (`ctx new`) or delete (`ctx destroy`) the runtime directory where FIFOs, state files, and dispatcher metadata live.
+# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 
-ctx_new_parser_definition() {
-  zshmq_parser_defaults
-  param CTX_PATH -p --path -- 'Target directory to initialise'
+ctx_print_usage() {
+  printf '%s\n' 'Usage: zshmq ctx <command> [options]'
+  printf '%s\n' ''
+  printf '%s\n' 'Commands:'
+  printf '  new      Initialise the runtime directory\n'
+  printf '  destroy  Remove the runtime directory (use --force to ignore leftovers)\n'
 }
 
-ctx_new() {
-  set -eu
-
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ] ; then
-      zshmq_log_error 'ctx_new: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # Load getoptions library from the vendored dependency.
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
-
-  set +e
-  zshmq_eval_parser ctx_new ctx_new_parser_definition "$@"
-  status=$?
-  set -e
-
-  case $status in
-    0)
-      eval "set -- $ZSHMQ_REST"
-      ;;
-    1)
-      return 1
-      ;;
-    2)
-      return 0
-      ;;
-  esac
-
-  if [ $# -gt 0 ]; then
-    zshmq_log_error 'ctx_new: unexpected argument -- %s' "$1"
-    return 1
-  fi
-
-  unset ZSHMQ_REST ||:
-
-  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
+ctx_resolve_target() {
+  target=$1
 
   if [ -z "$target" ]; then
-    zshmq_log_error 'ctx_new: target path is empty'
+    zshmq_log_error 'ctx: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      zshmq_log_error 'ctx_new: refusing to operate on root directory'
+      zshmq_log_error 'ctx: refusing to operate on root directory'
       return 1
       ;;
   esac
 
-  if [ ! -d "$target" ]; then
-    mkdir -p "$target"
+  printf '%s\n' "${target%/}"
+}
+
+ctx_new_impl() {
+  runtime_root=$1
+
+  if [ ! -d "$runtime_root" ]; then
+    mkdir -p "$runtime_root"
   fi
 
-  runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
+  zshmq_log_debug 'ctx new: initialised runtime=%s' "$runtime_root"
+}
 
-  if [ -z "$state_path" ]; then
-    zshmq_log_error 'ctx_new: state path is empty'
+ctx_destroy_impl() {
+  runtime_root=$1
+  force=$2
+
+  if [ ! -d "$runtime_root" ]; then
+    zshmq_log_debug 'ctx destroy: runtime not found (%s)' "$runtime_root"
+    return 0
+  fi
+
+  if [ "$force" = "1" ]; then
+    rm -rf "$runtime_root"
+    zshmq_log_debug 'ctx destroy: forcefully removed runtime=%s' "$runtime_root"
+    return 0
+  fi
+
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/bus.pid}
+  if [ -f "$pid_path" ]; then
+    rm -f "$pid_path"
+    zshmq_log_debug 'ctx destroy: removed pid=%s' "$pid_path"
+  fi
+
+  remaining=$(find "$runtime_root" -mindepth 1 -maxdepth 1 -not -name '.' -not -name '..' -print -quit 2>/dev/null || :)
+  if [ -n "${remaining:-}" ]; then
+    zshmq_log_error 'ctx destroy: runtime contains files; re-run with --force to remove %s' "$runtime_root"
     return 1
   fi
 
-  if [ -z "$bus_path" ]; then
-    zshmq_log_error 'ctx_new: bus path is empty'
+  if ! rmdir "$runtime_root" 2>/dev/null; then
+    zshmq_log_error 'ctx destroy: failed to remove directory %s' "$runtime_root"
     return 1
   fi
 
-  case $state_path in
-    */*)
-      state_dir=${state_path%/*}
+  zshmq_log_debug 'ctx destroy: cleaned runtime=%s' "$runtime_root"
+}
+
+ctx() {
+  set -eu
+
+  log_level=${ZSHMQ_LOG_LEVEL:-INFO}
+  target_path=${ZSHMQ_CTX_ROOT:-/tmp/zshmq}
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -p|--path)
+        shift
+        if [ $# -eq 0 ]; then
+          zshmq_log_error 'ctx: --path requires a value'
+          return 1
+        fi
+        target_path=$1
+        ;;
+      -p=*|--path=*)
+        target_path=${1#*=}
+        ;;
+      -d|--debug)
+        log_level=DEBUG
+        ;;
+      -t|--trace)
+        log_level=TRACE
+        ;;
+      -h|--help|help)
+        ctx_print_usage
+        return 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        zshmq_log_error 'ctx: unexpected option -- %s' "$1"
+        return 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift || :
+  done
+
+  export ZSHMQ_LOG_LEVEL=$log_level
+
+  if [ $# -eq 0 ]; then
+    ctx_print_usage
+    return 1
+  fi
+
+  subcommand=$1
+  shift
+
+  runtime_root=$(ctx_resolve_target "$target_path") || return 1
+
+  case $subcommand in
+    new)
+      if [ $# -gt 0 ]; then
+        zshmq_log_error 'ctx new: unexpected argument -- %s' "$1"
+        return 1
+      fi
+      ctx_new_impl "$runtime_root"
+      ;;
+    destroy)
+      force=0
+      while [ $# -gt 0 ]; do
+        case $1 in
+          -f|--force)
+            force=1
+            ;;
+          -h|--help|help)
+            ctx_print_usage
+            return 0
+            ;;
+          --)
+            shift
+            break
+            ;;
+          -*)
+            zshmq_log_error 'ctx destroy: unexpected option -- %s' "$1"
+            return 1
+            ;;
+          *)
+            zshmq_log_error 'ctx destroy: unexpected argument -- %s' "$1"
+            return 1
+            ;;
+        esac
+        shift || :
+      done
+
+      if [ $# -gt 0 ]; then
+        zshmq_log_error 'ctx destroy: unexpected argument -- %s' "$1"
+        return 1
+      fi
+
+      ctx_destroy_impl "$runtime_root" "$force"
       ;;
     *)
-      state_dir=.
-      ;;
-  esac
-  if [ "$state_dir" != "." ] && [ ! -d "$state_dir" ]; then
-    mkdir -p "$state_dir"
-  fi
-
-  if [ -e "$state_path" ] && [ ! -f "$state_path" ]; then
-    zshmq_log_error 'ctx_new: state path is not a regular file: %s' "$state_path"
-    return 1
-  fi
-
-  : > "$state_path"
-
-  case $bus_path in
-    */*)
-      bus_dir=${bus_path%/*}
-      ;;
-    *)
-      bus_dir=.
-      ;;
-  esac
-  if [ "$bus_dir" != "." ] && [ ! -d "$bus_dir" ]; then
-    mkdir -p "$bus_dir"
-  fi
-
-  if [ -e "$bus_path" ]; then
-    if [ -p "$bus_path" ]; then
-      rm -f "$bus_path"
-    else
-      zshmq_log_error 'ctx_new: bus path is not a FIFO: %s' "$bus_path"
+      zshmq_log_error 'ctx: unknown command -- %s' "$subcommand"
+      ctx_print_usage
       return 1
-    fi
-  fi
-
-  mkfifo "$bus_path"
-
-  zshmq_log_debug 'ctx_new: initialised runtime=%s' "$target"
+      ;;
+  esac
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then
-  zshmq_register_command ctx_new
+  zshmq_register_command ctx
 fi
 
 # shellcheck shell=sh
 
 #/**
-# ctx_destroy - Remove the runtime directory created by ctx_new.
-# @usage: zshmq ctx_destroy [--path PATH]
-# @summary: Remove the runtime directory (default: /tmp/zshmq) and its runtime files.
-# @description: Delete the bus FIFO and state file created by ctx_new and remove the runtime directory if it is now empty.
-# @option: -p, --path PATH    Target directory to remove (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# send - Publish a message to the zshmq dispatcher.
+# @usage: zshmq send --topic TOPIC [--path PATH] MESSAGE...
+# @summary: Publish a message through the dispatcher FIFO.
+# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the topic-specific bus so subscribers receive it.
+# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name for the published message (required).
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 
-ctx_destroy_parser_definition() {
+send_parser_definition() {
   zshmq_parser_defaults
-  param CTX_PATH -p --path -- 'Target directory to remove'
+  param CTX_PATH -p --path -- 'Runtime directory to target'
+  param SEND_TOPIC -T --topic -- 'Explicit topic to apply'
 }
 
-ctx_destroy() {
+send_trim() {
+  # Trim leading and trailing whitespace.
+  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+send() {
   set -eu
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'ctx_destroy: ZSHMQ_ROOT is not set'
+      zshmq_log_error 'send: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -684,7 +745,7 @@ ctx_destroy() {
   fi
 
   set +e
-  zshmq_eval_parser ctx_destroy ctx_destroy_parser_definition "$@"
+  zshmq_eval_parser send send_parser_definition "$@"
   status=$?
   set -e
 
@@ -700,63 +761,94 @@ ctx_destroy() {
       ;;
   esac
 
-  if [ $# -gt 0 ]; then
-    zshmq_log_error 'ctx_destroy: unexpected argument -- %s' "$1"
+  topic=${SEND_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'send: --topic is required'
     return 1
   fi
 
-  unset ZSHMQ_REST ||:
+  if [ $# -eq 0 ]; then
+    zshmq_log_error 'send: message is required'
+    return 1
+  fi
+
+  message=$1
+  shift
+  if [ $# -gt 0 ]; then
+    message="$message $*"
+  fi
+
+  topic=$(send_trim "$topic")
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'send: topic must not be empty'
+    return 1
+  fi
+
+  body=$message
+
+  case $topic in
+    *'|'*)
+      zshmq_log_error 'send: topic must not contain "|"'
+      return 1
+      ;;
+  esac
 
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    zshmq_log_error 'ctx_destroy: target path is empty'
+    zshmq_log_error 'send: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      zshmq_log_error 'ctx_destroy: refusing to operate on root directory'
+      zshmq_log_error 'send: refusing to operate on root directory'
       return 1
       ;;
   esac
 
-  if [ -d "$target" ]; then
-    runtime_root=${target%/}
-    state_path=${ZSHMQ_STATE:-${runtime_root}/state}
-    bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-    pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  runtime_root=${target%/}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
-    if [ -f "$state_path" ]; then
-      rm -f "$state_path"
-    fi
-    if [ -p "$bus_path" ] || [ -f "$bus_path" ]; then
-      rm -f "$bus_path"
-    fi
-    if [ -f "$pid_path" ]; then
-      rm -f "$pid_path"
-    fi
-    remaining=$(find "$target" -mindepth 1 -maxdepth 1 -not -name '.' -not -name '..' -print -quit 2>/dev/null || :)
-    if [ -z "${remaining:-}" ]; then
-      rmdir "$target" 2>/dev/null || :
-    fi
+  if [ ! -d "$target" ]; then
+    zshmq_log_error 'send: runtime directory not found: %s' "$target"
+    return 1
   fi
 
-  zshmq_log_debug 'ctx_destroy: cleaned runtime=%s' "$target"
+  if [ ! -p "$bus_path" ]; then
+    zshmq_log_error 'send: bus FIFO not found at %s' "$bus_path"
+    return 1
+  fi
+
+  if [ -f "$pid_path" ]; then
+    dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
+  else
+    dispatcher_pid=
+  fi
+
+  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+    zshmq_log_error 'send: dispatcher is not running'
+    return 1
+  fi
+
+  zshmq_log_trace 'send: topic=%s message=%s' "$topic" "$body"
+  printf 'PUB|%s|%s\n' "$topic" "$body" > "$bus_path"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then
-  zshmq_register_command ctx_destroy
+  zshmq_register_command send
 fi
 
 # shellcheck shell=sh
 
 #/**
 # start - Launch the dispatcher loop for zshmq.
-# @usage: zshmq start [--path PATH]
+# @usage: zshmq start --topic TOPIC [--path PATH]
 # @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
-# @description: Validate an existing runtime directory created by ctx_new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
+# @description: Validate an existing runtime directory created by ctx new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
 # @option: -p, --path PATH    Runtime directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name handled by this dispatcher.
 # @option: -f, --foreground   Run the dispatcher in the foreground.
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
@@ -766,6 +858,7 @@ fi
 start_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to initialise'
+  param START_TOPIC -T --topic -- 'Topic name handled by this dispatcher'
   flag START_FOREGROUND -f --foreground -- 'Run the dispatcher in the foreground'
 }
 
@@ -787,13 +880,12 @@ dispatcher_prune_state() {
   state_path=$1
   tmp_state="${state_path}.dispatcher.$$"
   : > "$tmp_state"
-  while IFS='|' read -r pattern fifo || [ -n "$pattern" ]; do
-    [ -n "$pattern" ] || continue
+  while IFS= read -r fifo || [ -n "$fifo" ]; do
     [ -n "$fifo" ] || continue
     fifo_pid=$(dispatcher_extract_fifo_pid "$fifo")
     if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
       if [ -p "$fifo" ]; then
-        printf '%s|%s\n' "$pattern" "$fifo" >> "$tmp_state"
+        printf '%s\n' "$fifo" >> "$tmp_state"
       fi
     else
       rm -f "$fifo" 2>/dev/null || :
@@ -844,19 +936,20 @@ zshmq_dispatch_loop() {
             dispatcher_prune_state "$state_path"
           fi
           zshmq_log_trace 'dispatcher: topic=%s message=%s' "$topic" "$message_body"
-          while IFS='|' read -r pattern fifo_path; do
-            [ -n "$pattern" ] || continue
+          while IFS= read -r fifo_path || [ -n "$fifo_path" ]; do
             [ -n "$fifo_path" ] || continue
             fifo_pid=$(dispatcher_extract_fifo_pid "$fifo_path")
             if [ -z "$fifo_pid" ] || ! kill -0 "$fifo_pid" 2>/dev/null; then
               continue
             fi
-            if printf '%s\n' "$topic" | grep -E -- "$pattern" >/dev/null 2>&1; then
-              if [ -p "$fifo_path" ]; then
-                zshmq_log_trace 'dispatcher: deliver topic=%s message=%s pattern=%s fifo=%s' "$topic" "$message_body" "$pattern" "$fifo_path"
-                { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
-              fi
-            fi
+            case $fifo_path in
+              *)
+                if [ -p "$fifo_path" ]; then
+                  zshmq_log_trace 'dispatcher: deliver topic=%s message=%s fifo=%s' "$topic" "$message_body" "$fifo_path"
+                  { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
+                fi
+                ;;
+            esac
           done < "$state_path"
         fi
         ;;
@@ -909,6 +1002,12 @@ start() {
 
   unset ZSHMQ_REST ||:
 
+  topic=${START_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'start: --topic is required'
+    return 1
+  fi
+
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
@@ -924,9 +1023,9 @@ start() {
   esac
 
   runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -d "$target" ]; then
     zshmq_log_error 'start: runtime directory not found: %s' "$target"
@@ -1069,7 +1168,7 @@ stop() {
   esac
 
   runtime_root=${target%/}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/bus.pid}
 
   if [ ! -f "$pid_path" ]; then
     zshmq_log_debug 'Dispatcher is not running.'
@@ -1114,172 +1213,12 @@ fi
 # shellcheck shell=sh
 
 #/**
-# send - Publish a message to the zshmq dispatcher.
-# @usage: zshmq send [--path PATH] [--topic TOPIC] MESSAGE...
-# @summary: Publish a message through the dispatcher FIFO.
-# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the bus so matching subscribers receive it.
+# sub - Subscribe to messages for a specific topic.
+# @usage: zshmq sub --topic TOPIC [--path PATH]
+# @summary: Register a subscriber FIFO and stream dispatched messages for TOPIC.
+# @description: Validate the runtime directory, ensure the dispatcher is running, register the subscription with the dispatcher, and stream messages until interrupted.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
-# @option: -T, --topic TOPIC  Explicit topic to apply instead of inferring from MESSAGE (before the first colon).
-# @option: -d, --debug        Enable DEBUG log level.
-# @option: -t, --trace        Enable TRACE log level.
-# @option: -h, --help         Display command documentation and exit.
-#*/
-
-send_parser_definition() {
-  zshmq_parser_defaults
-  param CTX_PATH -p --path -- 'Runtime directory to target'
-  param SEND_TOPIC -T --topic -- 'Explicit topic to apply'
-}
-
-send_trim() {
-  # Trim leading and trailing whitespace.
-  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-}
-
-send_ltrim() {
-  # Trim leading whitespace only.
-  printf '%s' "$1" | sed 's/^[[:space:]]*//'
-}
-
-send() {
-  set -eu
-
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'send: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
-
-  set +e
-  zshmq_eval_parser send send_parser_definition "$@"
-  status=$?
-  set -e
-
-  case $status in
-    0)
-      eval "set -- $ZSHMQ_REST"
-      ;;
-    1)
-      return 1
-      ;;
-    2)
-      return 0
-      ;;
-  esac
-
-  if [ $# -eq 0 ]; then
-    zshmq_log_error 'send: message is required'
-    return 1
-  fi
-
-  message=$1
-  shift
-  if [ $# -gt 0 ]; then
-    message="$message $*"
-  fi
-
-  topic=${SEND_TOPIC:-}
-  body=$message
-
-  if [ -z "$topic" ]; then
-    case $message in
-      *:*)
-        topic_part=${message%%:*}
-        body_part=${message#*:}
-        topic=$(send_trim "$topic_part")
-        body=$(send_ltrim "$body_part")
-        ;;
-      *)
-        zshmq_log_error 'send: unable to infer topic; provide --topic or include "<topic>: <message>".'
-        return 1
-        ;;
-    esac
-  else
-    topic=$(send_trim "$topic")
-    body=$message
-  fi
-
-  if [ -z "$topic" ]; then
-    zshmq_log_error 'send: topic must not be empty'
-    return 1
-  fi
-
-  case $topic in
-    *'|'*)
-      zshmq_log_error 'send: topic must not contain "|"'
-      return 1
-      ;;
-  esac
-
-  case $body in
-    *'|'*)
-      zshmq_log_error 'send: message must not contain "|"'
-      return 1
-      ;;
-  esac
-
-  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
-
-  if [ -z "$target" ]; then
-    zshmq_log_error 'send: target path is empty'
-    return 1
-  fi
-
-  case $target in
-    /|'')
-      zshmq_log_error 'send: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  runtime_root=${target%/}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
-
-  if [ ! -d "$target" ]; then
-    zshmq_log_error 'send: runtime directory not found: %s' "$target"
-    return 1
-  fi
-
-  if [ ! -p "$bus_path" ]; then
-    zshmq_log_error 'send: bus FIFO not found at %s' "$bus_path"
-    return 1
-  fi
-
-  if [ -f "$pid_path" ]; then
-    dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  else
-    dispatcher_pid=
-  fi
-
-  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    zshmq_log_error 'send: dispatcher is not running'
-    return 1
-  fi
-
-  zshmq_log_trace 'send: topic=%s message=%s' "$topic" "$body"
-  printf 'PUB|%s|%s\n' "$topic" "$body" > "$bus_path"
-}
-
-if command -v zshmq_register_command >/dev/null 2>&1; then
-  zshmq_register_command send
-fi
-
-# shellcheck shell=sh
-
-#/**
-# sub - Subscribe to messages that match a topic pattern.
-# @usage: zshmq sub [--path PATH] PATTERN
-# @summary: Register a subscriber FIFO and print dispatched messages for PATTERN.
-# @description: Validate the runtime directory, ensure the dispatcher is running, register the subscription with the dispatcher, and stream matching messages until interrupted.
-# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name to subscribe to.
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
@@ -1288,6 +1227,7 @@ fi
 sub_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to target'
+  param SUB_TOPIC -T --topic -- 'Topic name to subscribe to'
 }
 
 sub_extract_fifo_pid() {
@@ -1308,13 +1248,12 @@ sub_prune_state() {
   state_path=$1
   tmp_state="${state_path}.prune.$$"
   : > "$tmp_state"
-  while IFS='|' read -r existing_pattern existing_fifo || [ -n "$existing_pattern" ]; do
-    [ -n "$existing_pattern" ] || continue
+  while IFS= read -r existing_fifo || [ -n "$existing_fifo" ]; do
     [ -n "$existing_fifo" ] || continue
     fifo_pid=$(sub_extract_fifo_pid "$existing_fifo")
     if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
       if [ -p "$existing_fifo" ]; then
-        printf '%s|%s\n' "$existing_pattern" "$existing_fifo" >> "$tmp_state"
+        printf '%s\n' "$existing_fifo" >> "$tmp_state"
       fi
     else
       rm -f "$existing_fifo" 2>/dev/null || :
@@ -1333,9 +1272,9 @@ sub_cleanup() {
     eval "exec ${SUB_FIFO_FD}>&-" 2>/dev/null || :
   fi
 
-  if [ "${SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${SUB_BUS_PATH:-}" ] && [ -n "${SUB_PATTERN:-}" ] && [ -n "${SUB_FIFO_PATH:-}" ]; then
+  if [ "${SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${SUB_BUS_PATH:-}" ] && [ -n "${SUB_FIFO_PATH:-}" ]; then
     if [ -n "${SUB_DISPATCHER_PID:-}" ] && kill -0 "$SUB_DISPATCHER_PID" 2>/dev/null; then
-      { printf 'UNSUB|%s|%s\n' "$SUB_PATTERN" "$SUB_FIFO_PATH"; } > "$SUB_BUS_PATH" 2>/dev/null || :
+      { printf 'UNSUB|%s\n' "$SUB_FIFO_PATH"; } > "$SUB_BUS_PATH" 2>/dev/null || :
     fi
     SUB_REGISTERED=0
   fi
@@ -1345,16 +1284,15 @@ sub_cleanup() {
     : > "$tmp_state"
     while IFS= read -r state_line || [ -n "$state_line" ]; do
       [ -n "$state_line" ] || continue
-      state_pattern=${state_line%%|*}
-      state_fifo=${state_line#*|}
-      if [ "${state_pattern}|${state_fifo}" = "${SUB_PATTERN:-}|${SUB_FIFO_PATH:-}" ]; then
+      state_fifo=$state_line
+      if [ "$state_fifo" = "${SUB_FIFO_PATH:-}" ]; then
         rm -f "$state_fifo" 2>/dev/null || :
         continue
       fi
       fifo_pid=$(sub_extract_fifo_pid "$state_fifo")
       if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
         if [ -p "$state_fifo" ]; then
-          printf '%s|%s\n' "$state_pattern" "$state_fifo" >> "$tmp_state"
+          printf '%s\n' "$state_fifo" >> "$tmp_state"
         fi
       else
         rm -f "$state_fifo" 2>/dev/null || :
@@ -1401,38 +1339,16 @@ sub() {
       ;;
   esac
 
-  if [ $# -eq 0 ]; then
-    zshmq_log_error 'sub: pattern is required'
-    return 1
-  fi
-
-  pattern=$1
-  shift || :
-
   if [ $# -gt 0 ]; then
     zshmq_log_error 'sub: unexpected argument -- %s' "$1"
     return 1
   fi
 
-  if [ -z "$pattern" ]; then
-    zshmq_log_error 'sub: pattern must not be empty'
+  topic=${SUB_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'sub: --topic is required'
     return 1
   fi
-
-  case $pattern in
-    *'|'*)
-      zshmq_log_error 'sub: pattern must not contain "|"'
-      return 1
-      ;;
-  esac
-
-  case $pattern in
-    *'
-'*)
-      zshmq_log_error 'sub: pattern must not contain newlines'
-      return 1
-      ;;
-  esac
 
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
@@ -1454,9 +1370,9 @@ sub() {
   fi
 
   runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -f "$state_path" ]; then
     zshmq_log_error 'sub: state file not found at %s' "$state_path"
@@ -1481,7 +1397,7 @@ sub() {
 
   SUB_DISPATCHER_PID=$dispatcher_pid
 
-  fifo_path=${runtime_root}/sub.$$
+  fifo_path=${runtime_root}/${topic}.$$
   if [ -e "$fifo_path" ]; then
     zshmq_log_error 'sub: subscriber fifo already exists at %s' "$fifo_path"
     return 1
@@ -1492,7 +1408,6 @@ sub() {
     return 1
   fi
 
-  SUB_PATTERN=$pattern
   SUB_BUS_PATH=$bus_path
   SUB_FIFO_PATH=$fifo_path
   SUB_FIFO_FD=9
@@ -1509,7 +1424,7 @@ sub() {
   trap 'sub_cleanup; exit 129' HUP
   trap 'sub_cleanup' EXIT
 
-  if ! { printf 'SUB|%s|%s\n' "$pattern" "$fifo_path"; } > "$bus_path"; then
+  if ! { printf 'SUB|%s\n' "$fifo_path"; } > "$bus_path"; then
     zshmq_log_error 'sub: failed to register with dispatcher'
     sub_cleanup
     return 1
@@ -1522,10 +1437,10 @@ sub() {
     return 1
   fi
 
-  zshmq_log_debug 'sub: subscribed to pattern=%s fifo=%s' "$pattern" "$fifo_path"
+  zshmq_log_debug 'sub: subscribed to topic=%s fifo=%s' "$topic" "$fifo_path"
 
   while IFS= read -r line <&9 || [ -n "$line" ]; do
-    zshmq_log_trace 'sub: received pattern=%s message=%s' "$pattern" "$line"
+    zshmq_log_trace 'sub: received topic=%s message=%s' "$topic" "$line"
     printf '%s\n' "$line"
   done
 
@@ -1534,6 +1449,273 @@ sub() {
 
 if command -v zshmq_register_command >/dev/null 2>&1; then
   zshmq_register_command sub
+fi
+
+# shellcheck shell=sh
+
+#/**
+# topic - Manage topic assets within a runtime directory.
+# @usage: zshmq topic <command> [options]
+# @summary: Manage topic FIFOs and state files.
+# @description: Provides subcommands to provision or remove the FIFO/state pair used by publishers and subscribers for a topic.
+# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -d, --debug        Enable DEBUG log level.
+# @option: -t, --trace        Enable TRACE log level.
+# @option: -h, --help         Display command documentation and exit.
+#*/
+
+topic_print_usage() {
+  printf '%s\n' 'Usage: zshmq topic <command> [options]'
+  printf '%s\n' ''
+  printf '%s\n' 'Commands:'
+  printf '  new      Initialise topic assets (-T/--topic required)\n'
+  printf '  destroy  Remove topic assets    (-T/--topic required)\n'
+}
+
+topic_require_topic() {
+  subcommand=$1
+  shift
+
+  topic_name=
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -T|--topic)
+        shift
+        if [ $# -eq 0 ]; then
+          zshmq_log_error 'topic %s: --topic requires a value' "$subcommand"
+          return 1
+        fi
+        topic_name=$1
+        ;;
+      -T=*|--topic=*)
+        topic_name=${1#*=}
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        zshmq_log_error 'topic %s: unexpected option -- %s' "$subcommand" "$1"
+        return 1
+        ;;
+      *)
+        zshmq_log_error 'topic %s: unexpected argument -- %s' "$subcommand" "$1"
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  if [ $# -gt 0 ]; then
+    zshmq_log_error 'topic %s: unexpected argument -- %s' "$subcommand" "$1"
+    return 1
+  fi
+
+  if [ -z "${topic_name:-}" ]; then
+    zshmq_log_error 'topic %s: --topic is required' "$subcommand"
+    return 1
+  fi
+
+  case $topic_name in
+    *'|'*)
+      zshmq_log_error 'topic %s: topic must not contain "|"' "$subcommand"
+      return 1
+      ;;
+    *'/'*)
+      zshmq_log_error 'topic %s: topic must not contain "/"' "$subcommand"
+      return 1
+      ;;
+    *'
+'*)
+      zshmq_log_error 'topic %s: topic must not contain newlines' "$subcommand"
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "$topic_name"
+}
+
+topic_ensure_runtime() {
+  path=$1
+
+  if [ -z "$path" ]; then
+    zshmq_log_error 'topic: target path is empty'
+    return 1
+  fi
+
+  case $path in
+    /|'')
+      zshmq_log_error 'topic: refusing to operate on root directory'
+      return 1
+      ;;
+  esac
+
+  if [ ! -d "$path" ]; then
+    zshmq_log_error 'topic: runtime directory not found: %s' "$path"
+    return 1
+  fi
+
+  printf '%s\n' "${path%/}"
+}
+
+topic_new() {
+  runtime_root=$1
+  topic_name=$2
+
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic_name}.state}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic_name}.topic}
+
+  case $state_path in
+    */*)
+      state_dir=${state_path%/*}
+      ;;
+    *)
+      state_dir=.
+      ;;
+  esac
+  if [ "$state_dir" != "." ] && [ ! -d "$state_dir" ]; then
+    mkdir -p "$state_dir"
+  fi
+
+  if [ -e "$state_path" ] && [ ! -f "$state_path" ]; then
+    zshmq_log_error 'topic new: state path is not a regular file: %s' "$state_path"
+    return 1
+  fi
+  : > "$state_path"
+
+  case $bus_path in
+    */*)
+      bus_dir=${bus_path%/*}
+      ;;
+    *)
+      bus_dir=.
+      ;;
+  esac
+  if [ "$bus_dir" != "." ] && [ ! -d "$bus_dir" ]; then
+    mkdir -p "$bus_dir"
+  fi
+
+  if [ -e "$bus_path" ]; then
+    if [ -p "$bus_path" ]; then
+      rm -f "$bus_path"
+    else
+      zshmq_log_error 'topic new: bus path is not a FIFO: %s' "$bus_path"
+      return 1
+    fi
+  fi
+
+  if ! mkfifo "$bus_path"; then
+    zshmq_log_error 'topic new: failed to create fifo at %s' "$bus_path"
+    return 1
+  fi
+
+  zshmq_log_debug 'topic new: initialised topic=%s runtime=%s' "$topic_name" "$runtime_root"
+}
+
+topic_destroy() {
+  runtime_root=$1
+  topic_name=$2
+
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic_name}.state}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic_name}.topic}
+
+  if [ -f "$state_path" ]; then
+    rm -f "$state_path"
+    zshmq_log_debug 'topic destroy: removed state=%s' "$state_path"
+  else
+    zshmq_log_trace 'topic destroy: state missing (%s)' "$state_path"
+  fi
+
+  if [ -p "$bus_path" ] || [ -f "$bus_path" ]; then
+    rm -f "$bus_path"
+    zshmq_log_debug 'topic destroy: removed fifo=%s' "$bus_path"
+  else
+    zshmq_log_trace 'topic destroy: fifo missing (%s)' "$bus_path"
+  fi
+}
+
+topic() {
+  set -eu
+
+  log_level=${ZSHMQ_LOG_LEVEL:-INFO}
+  target_path=${ZSHMQ_CTX_ROOT:-/tmp/zshmq}
+
+  export ZSHMQ_LOG_LEVEL=$log_level
+
+  while [ $# -gt 0 ]; do
+    case $1 in
+      -p|--path)
+        shift
+        if [ $# -eq 0 ]; then
+          zshmq_log_error 'topic: --path requires a value'
+          return 1
+        fi
+        target_path=$1
+        ;;
+      -p=*|--path=*)
+        target_path=${1#*=}
+        ;;
+      -d|--debug)
+        log_level=DEBUG
+        ;;
+      -t|--trace)
+        log_level=TRACE
+        ;;
+      -h|--help|help)
+        topic_print_usage
+        return 0
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        zshmq_log_error 'topic: unexpected option -- %s' "$1"
+        return 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift || :
+  done
+
+  export ZSHMQ_LOG_LEVEL=$log_level
+
+  if [ $# -eq 0 ]; then
+    topic_print_usage
+    return 1
+  fi
+
+  subcommand=$1
+  shift
+
+  runtime_root=$(topic_ensure_runtime "$target_path") || return 1
+
+  case $subcommand in
+    new)
+      topic_name=$(topic_require_topic "$subcommand" "$@") || return 1
+      topic_new "$runtime_root" "$topic_name"
+      ;;
+    destroy)
+      topic_name=$(topic_require_topic "$subcommand" "$@") || return 1
+      topic_destroy "$runtime_root" "$topic_name"
+      ;;
+    -h|--help|help)
+      topic_print_usage
+      return 0
+      ;;
+    *)
+      zshmq_log_error 'topic: unknown command -- %s' "$subcommand"
+      topic_print_usage
+      return 1
+      ;;
+  esac
+}
+
+if command -v zshmq_register_command >/dev/null 2>&1; then
+  zshmq_register_command topic
 fi
 
 set -eu
@@ -1566,9 +1748,9 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
 
   # Load command implementations after helper definitions.
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/ctx_new.sh"
+  . "${ZSHMQ_ROOT}/lib/ctx.sh"
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/ctx_destroy.sh"
+  . "${ZSHMQ_ROOT}/lib/topic.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/start.sh"
   # shellcheck disable=SC1091
@@ -1641,11 +1823,11 @@ case $command_name in
     printf '%s\n' "${ZSHMQ_VERSION:-0.0.0}"
     exit 0
     ;;
-  ctx_new)
-    ctx_new "$@"
+  ctx)
+    ctx "$@"
     ;;
-  ctx_destroy)
-    ctx_destroy "$@"
+  topic)
+    topic "$@"
     ;;
   start)
     start "$@"

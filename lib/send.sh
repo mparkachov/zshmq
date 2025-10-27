@@ -3,11 +3,11 @@
 
 #/**
 # send - Publish a message to the zshmq dispatcher.
-# @usage: zshmq send [--path PATH] [--topic TOPIC] MESSAGE...
+# @usage: zshmq send --topic TOPIC [--path PATH] MESSAGE...
 # @summary: Publish a message through the dispatcher FIFO.
-# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the bus so matching subscribers receive it.
+# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the topic-specific bus so subscribers receive it.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
-# @option: -T, --topic TOPIC  Explicit topic to apply instead of inferring from MESSAGE (before the first colon).
+# @option: -T, --topic TOPIC  Topic name for the published message (required).
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
@@ -22,11 +22,6 @@ send_parser_definition() {
 send_trim() {
   # Trim leading and trailing whitespace.
   printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-}
-
-send_ltrim() {
-  # Trim leading whitespace only.
-  printf '%s' "$1" | sed 's/^[[:space:]]*//'
 }
 
 send() {
@@ -62,6 +57,12 @@ send() {
       ;;
   esac
 
+  topic=${SEND_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'send: --topic is required'
+    return 1
+  fi
+
   if [ $# -eq 0 ]; then
     zshmq_log_error 'send: message is required'
     return 1
@@ -73,42 +74,17 @@ send() {
     message="$message $*"
   fi
 
-  topic=${SEND_TOPIC:-}
-  body=$message
-
-  if [ -z "$topic" ]; then
-    case $message in
-      *:*)
-        topic_part=${message%%:*}
-        body_part=${message#*:}
-        topic=$(send_trim "$topic_part")
-        body=$(send_ltrim "$body_part")
-        ;;
-      *)
-        zshmq_log_error 'send: unable to infer topic; provide --topic or include "<topic>: <message>".'
-        return 1
-        ;;
-    esac
-  else
-    topic=$(send_trim "$topic")
-    body=$message
-  fi
-
+  topic=$(send_trim "$topic")
   if [ -z "$topic" ]; then
     zshmq_log_error 'send: topic must not be empty'
     return 1
   fi
 
+  body=$message
+
   case $topic in
     *'|'*)
       zshmq_log_error 'send: topic must not contain "|"'
-      return 1
-      ;;
-  esac
-
-  case $body in
-    *'|'*)
-      zshmq_log_error 'send: message must not contain "|"'
       return 1
       ;;
   esac
@@ -128,8 +104,8 @@ send() {
   esac
 
   runtime_root=${target%/}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -d "$target" ]; then
     zshmq_log_error 'send: runtime directory not found: %s' "$target"

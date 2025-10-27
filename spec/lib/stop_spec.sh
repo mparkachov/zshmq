@@ -1,7 +1,8 @@
 Describe 'stop'
   Include lib/command_helpers.sh
   Include lib/logging.sh
-  Include lib/ctx_new.sh
+  Include lib/ctx.sh
+  Include lib/topic.sh
   Include lib/start.sh
   Include lib/stop.sh
 
@@ -9,7 +10,8 @@ Describe 'stop'
     export ZSHMQ_ROOT="$PWD"
     export ZSHMQ_CTX_ROOT="$SHELLSPEC_TMPDIR/zshmq"
     rm -rf "$ZSHMQ_CTX_ROOT"
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
   }
 
   after_each() {
@@ -20,12 +22,12 @@ Describe 'stop'
   AfterEach 'after_each'
 
   It 'stops a running dispatcher and removes the pid file'
-    start --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
-    pid_before=$(cat "$ZSHMQ_CTX_ROOT/dispatcher.pid")
+    start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
+    pid_before=$(cat "$ZSHMQ_CTX_ROOT/bus.pid")
     When run stop --path "$ZSHMQ_CTX_ROOT"
     The status should be success
     The stderr should equal ''
-    The path "$ZSHMQ_CTX_ROOT/dispatcher.pid" should not exist
+    The path "$ZSHMQ_CTX_ROOT/bus.pid" should not exist
   End
 
   It 'succeeds even when the dispatcher is not running'

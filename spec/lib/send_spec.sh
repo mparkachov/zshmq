@@ -1,7 +1,8 @@
 Describe 'send'
   Include lib/command_helpers.sh
   Include lib/logging.sh
-  Include lib/ctx_new.sh
+  Include lib/ctx.sh
+  Include lib/topic.sh
   Include lib/start.sh
   Include lib/stop.sh
   Include lib/send.sh
@@ -30,71 +31,72 @@ Describe 'send'
   AfterEach 'after_each'
 
   ensure_dispatcher_running() {
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
     SEND_SPEC_CAPTURE=${SEND_SPEC_CAPTURE:-"$SHELLSPEC_TMPDIR/send_capture"}
     : > "$SEND_SPEC_CAPTURE"
     {
       while IFS= read -r line; do
         printf '%s\n' "$line" >> "$SEND_SPEC_CAPTURE"
         break
-      done < "${ZSHMQ_CTX_ROOT}/bus"
+      done < "${ZSHMQ_CTX_ROOT}/bus.topic"
     } &
     SEND_SPEC_READER_PID=$!
     ( sleep 60 ) &
     SEND_SPEC_DISPATCHER_PID=$!
-    printf '%s\n' "$SEND_SPEC_DISPATCHER_PID" > "${ZSHMQ_CTX_ROOT}/dispatcher.pid"
+    printf '%s\n' "$SEND_SPEC_DISPATCHER_PID" > "${ZSHMQ_CTX_ROOT}/bus.pid"
   }
 
-  It 'publishes using an inferred topic'
+  It 'publishes to the requested topic'
     SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
     ensure_dispatcher_running
-    When run send --path "$ZSHMQ_CTX_ROOT" 'ALERT: system overload'
+    When run send --path "$ZSHMQ_CTX_ROOT" --topic bus 'system overload'
     The status should be success
     The stdout should equal ''
     The stderr should not include '[INFO] send: published'
     The stderr should not include '[TRACE]'
     wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
     SEND_SPEC_READER_PID=
-    The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|ALERT|system overload'
+    The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|bus|system overload'
   End
 
   It 'logs the dispatched message when trace logging is enabled'
     SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
     ensure_dispatcher_running
-    When run send --path "$ZSHMQ_CTX_ROOT" --trace 'ALERT: system overload'
+    When run send --path "$ZSHMQ_CTX_ROOT" --topic bus --trace 'system overload'
     The status should be success
     The stdout should equal ''
-    The stderr should include '[TRACE] send: topic=ALERT message=system overload'
+    The stderr should include '[TRACE] send: topic=bus message=system overload'
     The stderr should not include '[INFO] send: published'
     wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
     SEND_SPEC_READER_PID=
   End
 
   It 'fails when the dispatcher is not running'
-    ctx_new --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1
-    When run send --path "$ZSHMQ_CTX_ROOT" 'ALERT: no loop'
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+    When run send --path "$ZSHMQ_CTX_ROOT" --topic bus 'no loop'
     The status should be failure
     The stderr should include '[ERROR] send: dispatcher is not running'
   End
 
-  It 'requires an explicit topic when it cannot infer one'
-    SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
+  It 'requires --topic'
     ensure_dispatcher_running
     When run send --path "$ZSHMQ_CTX_ROOT" 'Malformed message'
     The status should be failure
-    The stderr should include '[ERROR] send: unable to infer topic'
+    The stderr should include '[ERROR] send: --topic is required'
   End
 
-  It 'accepts -T for explicit topics without enabling trace logging'
+  It 'allows message payloads containing pipes'
     SEND_SPEC_CAPTURE="$SHELLSPEC_TMPDIR/bus_payload"
     ensure_dispatcher_running
-    When run send --path "$ZSHMQ_CTX_ROOT" -T ALERT 'System overload'
+    When run send --path "$ZSHMQ_CTX_ROOT" --topic bus 'value | with | pipes'
     The status should be success
     The stdout should equal ''
     The stderr should not include '[INFO] send: published'
     The stderr should not include '[TRACE]'
     wait "$SEND_SPEC_READER_PID" 2>/dev/null || :
     SEND_SPEC_READER_PID=
-    The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|ALERT|System overload'
+    The contents of file "$SEND_SPEC_CAPTURE" should equal 'PUB|bus|value | with | pipes'
   End
 End

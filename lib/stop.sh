@@ -72,7 +72,7 @@ stop() {
   esac
 
   runtime_root=${target%/}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/bus.pid}
 
   if [ ! -f "$pid_path" ]; then
     zshmq_log_debug 'Dispatcher is not running.'

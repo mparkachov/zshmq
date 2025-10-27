@@ -8,9 +8,11 @@ Do not hand-edit the bundled `./zshmq` release script. Always regenerate it with
 ## Build, Test, and Development Commands
 Expose every build, package, and test workflow through POSIX-compliant `make` targets (strictly POSIX make syntax - no GNU extensions). Provide at minimum `make build` to emit `bin/zshmq.sh` and `make test` to run the full ShellSpec suite; add focused targets or variables for module-level specs when useful. The underlying scripts may still live in `scripts/`, but users should be able to rely on `make` alone. Verify the CLI manually via `./bin/zshmq.sh <command> ...` before shipping a change.
 
-`zshmq ctx_new` must bootstrap the runtime directory (default `/tmp/zshmq`) and rely on the vendored getoptions parser for command-line flags.
+`zshmq ctx new` must bootstrap the runtime directory (default `/tmp/zshmq`) and rely on the vendored getoptions parser for command-line flags.
 
 Provide `make bootstrap` to initialise submodules and the local `tmp/` workspace before running other targets.
+
+Use `zshmq topic new -T <topic>` to create the FIFO/state assets for a topic; `ctx new` only prepares the runtime directory. Remove them via `zshmq topic destroy -T <topic>` when needed.
 
 ## Coding Style & Naming Conventions
 Author POSIX-compliant shell (`#!/usr/bin/env sh`). Prefer two-space indentation, guard against unbound variables (`set -eu`), and use `printf` over `echo` when formatting output. Keep documentation and code ASCII-only - avoid emojis or iconography. Name files and functions with snake_case (`dispatcher_loop`, `lib/subscriber.sh`) and mirror relevant ZeroMQ function names when behaviors align to ease cross-referencing. Keep functions pure where possible; side-effect helpers should end with `_cmd` to signal command usage. Document non-obvious logic with short inline comments.
@@ -25,7 +27,7 @@ Write a ShellSpec file for every module under `lib/`. Name contexts after the co
 Foreground-oriented workflows (e.g., `sub`, `start --foreground`) must be validated manually; avoid exercising long-lived streaming loops from ShellSpec to prevent hangs.
 
 ## Commit & Pull Request Guidelines
-Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh send "ALERT: test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
+Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh send --topic bus "test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
 
 ## Security & Environment Tips
-Never commit actual FIFOs or files created in `/tmp`. Sanitize topic patterns received from users before interpolation. When testing locally, override `ZSHMQ_BUS` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_BUS=$PWD/tmp/bus`). Clean up stray FIFOs with `./bin/zshmq.sh stop` or manual `rm` to prevent resource leaks.
+Never commit actual FIFOs or files created in `/tmp`. Sanitize topic names received from users before interpolation. When testing locally, override `ZSHMQ_BUS` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_BUS=$PWD/tmp/bus.topic`). Clean up stray FIFOs with `./bin/zshmq.sh stop` or manual `rm` to prevent resource leaks.

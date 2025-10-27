@@ -3,10 +3,11 @@
 
 #/**
 # start - Launch the dispatcher loop for zshmq.
-# @usage: zshmq start [--path PATH]
+# @usage: zshmq start --topic TOPIC [--path PATH]
 # @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
-# @description: Validate an existing runtime directory created by ctx_new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
+# @description: Validate an existing runtime directory created by ctx new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
 # @option: -p, --path PATH    Runtime directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name handled by this dispatcher.
 # @option: -f, --foreground   Run the dispatcher in the foreground.
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
@@ -16,6 +17,7 @@
 start_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to initialise'
+  param START_TOPIC -T --topic -- 'Topic name handled by this dispatcher'
   flag START_FOREGROUND -f --foreground -- 'Run the dispatcher in the foreground'
 }
 
@@ -37,13 +39,12 @@ dispatcher_prune_state() {
   state_path=$1
   tmp_state="${state_path}.dispatcher.$$"
   : > "$tmp_state"
-  while IFS='|' read -r pattern fifo || [ -n "$pattern" ]; do
-    [ -n "$pattern" ] || continue
+  while IFS= read -r fifo || [ -n "$fifo" ]; do
     [ -n "$fifo" ] || continue
     fifo_pid=$(dispatcher_extract_fifo_pid "$fifo")
     if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
       if [ -p "$fifo" ]; then
-        printf '%s|%s\n' "$pattern" "$fifo" >> "$tmp_state"
+        printf '%s\n' "$fifo" >> "$tmp_state"
       fi
     else
       rm -f "$fifo" 2>/dev/null || :
@@ -94,19 +95,20 @@ zshmq_dispatch_loop() {
             dispatcher_prune_state "$state_path"
           fi
           zshmq_log_trace 'dispatcher: topic=%s message=%s' "$topic" "$message_body"
-          while IFS='|' read -r pattern fifo_path; do
-            [ -n "$pattern" ] || continue
+          while IFS= read -r fifo_path || [ -n "$fifo_path" ]; do
             [ -n "$fifo_path" ] || continue
             fifo_pid=$(dispatcher_extract_fifo_pid "$fifo_path")
             if [ -z "$fifo_pid" ] || ! kill -0 "$fifo_pid" 2>/dev/null; then
               continue
             fi
-            if printf '%s\n' "$topic" | grep -E -- "$pattern" >/dev/null 2>&1; then
-              if [ -p "$fifo_path" ]; then
-                zshmq_log_trace 'dispatcher: deliver topic=%s message=%s pattern=%s fifo=%s' "$topic" "$message_body" "$pattern" "$fifo_path"
-                { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
-              fi
-            fi
+            case $fifo_path in
+              *)
+                if [ -p "$fifo_path" ]; then
+                  zshmq_log_trace 'dispatcher: deliver topic=%s message=%s fifo=%s' "$topic" "$message_body" "$fifo_path"
+                  { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
+                fi
+                ;;
+            esac
           done < "$state_path"
         fi
         ;;
@@ -159,6 +161,12 @@ start() {
 
   unset ZSHMQ_REST ||:
 
+  topic=${START_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'start: --topic is required'
+    return 1
+  fi
+
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
@@ -174,9 +182,9 @@ start() {
   esac
 
   runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
+  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -d "$target" ]; then
     zshmq_log_error 'start: runtime directory not found: %s' "$target"
