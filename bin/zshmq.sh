@@ -33,9 +33,7 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/topic.sh"
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/start.sh"
-  # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/stop.sh"
+  . "${ZSHMQ_ROOT}/lib/dispatch.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/send.sh"
   # shellcheck disable=SC1091
@@ -110,11 +108,8 @@ case $command_name in
   topic)
     topic "$@"
     ;;
-  start)
-    start "$@"
-    ;;
-  stop)
-    stop "$@"
+  dispatch)
+    dispatch "$@"
     ;;
   send)
     send "$@"

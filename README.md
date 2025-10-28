@@ -13,7 +13,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
-- **ZeroMQ-like CLI:** Familiar commands (`send`, `sub`, `start`, etc.).
+- **ZeroMQ-like CLI:** Familiar commands (`dispatch`, `send`, `sub`, etc.).
 - **Tiny:** A single portable shell script.
 
 ---
@@ -133,7 +133,7 @@ Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispa
 
 ### Step 3: Start Dispatcher
 ```bash
-zshmq start --topic topic
+zshmq dispatch start --topic topic
 ```
 Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx new` to have prepared the runtime directory first and will exit with an error if the context is missing. Supply `--topic` to decide which FIFO/topic name the dispatcher should service.
 Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
@@ -173,7 +173,7 @@ Removes your FIFO and deregisters from the dispatcher.
 
 ### Step 8: Stop Dispatcher
 ```bash
-zshmq stop --topic topic
+zshmq dispatch stop --topic topic
 ```
 Gracefully terminates the router for the supplied topic and cleans up /tmp/zshmq/topic.fifo.
 
@@ -189,12 +189,12 @@ zshmq ctx new [--path PATH]	Create or reset the runtime directory (default: /tmp
 zshmq ctx destroy [--force]	Remove the runtime directory (default: /tmp/zshmq); use --force to delete non-empty directories
 zshmq topic new -T <topic>	Create the FIFO and state file for the topic inside the runtime directory
 zshmq topic destroy -T <topic>	Remove the FIFO and state file for the topic
-zshmq start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
+zshmq dispatch start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
 zshmq send --topic <topic> <message>	Publish a message for the topic
 zshmq sub --topic <topic>	Subscribe to messages on the topic
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber
-zshmq stop --topic <topic>	Stop the dispatcher for a topic
+zshmq dispatch stop --topic <topic>	Stop the dispatcher for a topic
 zshmq --help	Show usage
 zshmq --version	Display version info
 
@@ -203,7 +203,7 @@ Variable	Default	Description
 ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx new
 ZSHMQ_TOPIC	/tmp/zshmq/topic.fifo	Main FIFO path
 ZSHMQ_STATE	/tmp/zshmq/topic.state	Subscription table
-ZSHMQ_DISPATCH_PID	/tmp/zshmq/topic.pid	PID file tracked by start/stop
+ZSHMQ_DISPATCH_PID	/tmp/zshmq/topic.pid	PID file tracked by dispatch start/stop
 ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by -d/--debug and -t/--trace
 
 ### Example Session
@@ -216,7 +216,7 @@ zshmq topic new -T topic
 
 Terminal 2 - Dispatcher
 ```bash
-zshmq start --topic topic
+zshmq dispatch start --topic topic
 ```
 
 Terminal 3 - Subscriber

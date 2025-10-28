@@ -3,8 +3,7 @@ Describe 'send'
   Include lib/logging.sh
   Include lib/ctx.sh
   Include lib/topic.sh
-  Include lib/start.sh
-  Include lib/stop.sh
+  Include lib/dispatch.sh
   Include lib/send.sh
 
   before_each() {
@@ -15,7 +14,7 @@ Describe 'send'
 
   after_each() {
     if [ -d "$ZSHMQ_CTX_ROOT" ]; then
-      stop --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1 || :
+      dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1 || :
     fi
     if [ -n "${SEND_SPEC_DISPATCHER_PID:-}" ]; then
       kill "$SEND_SPEC_DISPATCHER_PID" >/dev/null 2>&1 || :

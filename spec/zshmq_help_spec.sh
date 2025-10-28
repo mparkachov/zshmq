@@ -5,12 +5,13 @@ Describe 'zshmq --help'
     The stdout should include 'Commands:'
     The stdout should include 'ctx - Manage the runtime directory (default: /tmp/zshmq).'
     The stdout should include 'topic - Manage topic FIFOs and state files.'
-    The stdout should include 'start - Launch the dispatcher (default root: /tmp/zshmq) in the background.'
-    The stdout should include 'stop - Stop the dispatcher running for the given runtime directory (default: /tmp/zshmq).'
+    The stdout should include 'dispatch - Start or stop the dispatcher that routes messages for a topic.'
     The stdout should include 'send - Publish a message through the dispatcher FIFO.'
     The stdout should include 'Each command supports -h/--help plus -d/--debug and -t/--trace for log verbosity.'
     The stdout should not include 'Command: ctx'
     The stdout should not include 'Command: topic'
+    The stdout should not include 'Command: start'
+    The stdout should not include 'Command: stop'
   End
 End
 
@@ -34,20 +35,30 @@ Describe 'zshmq topic --help'
   End
 End
 
-Describe 'zshmq start --help'
+Describe 'zshmq dispatch --help'
   It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh start --help
+    When run ./bin/zshmq.sh dispatch --help
     The status should be success
-    The stdout should include 'Command: start'
+    The stdout should include 'Usage: zshmq dispatch <command>'
+    The stdout should include 'start  Launch the dispatcher for a topic'
+    The stdout should include 'stop   Terminate the dispatcher for a topic'
+  End
+End
+
+Describe 'zshmq dispatch start --help'
+  It 'shows command-specific documentation'
+    When run ./bin/zshmq.sh dispatch start --help
+    The status should be success
+    The stdout should include 'Command: dispatch start'
     The stdout should include 'Options:'
   End
 End
 
-Describe 'zshmq stop --help'
+Describe 'zshmq dispatch stop --help'
   It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh stop --help
+    When run ./bin/zshmq.sh dispatch stop --help
     The status should be success
-    The stdout should include 'Command: stop'
+    The stdout should include 'Command: dispatch stop'
     The stdout should include 'Options:'
   End
 End

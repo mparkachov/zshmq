@@ -66,12 +66,13 @@ zshmq_parser_defaults() {
 
 zshmq_print_command_help() {
   command=$1
+  display_command=$(printf '%s' "$command" | tr '_' ' ')
   usage=$(zshmq_command_metadata "$command" usage | sed -n '1p')
   if [ -z "$usage" ]; then
-    usage="zshmq $command"
+    usage="zshmq $display_command"
   fi
 
-  printf 'Command: %s\n' "$command"
+  printf 'Command: %s\n' "$display_command"
   printf 'Usage: %s\n' "$usage"
   printf '\n'
 
@@ -101,7 +102,8 @@ zshmq_eval_parser() {
   shift 2
   ZSHMQ_PARSER_USAGE=$(zshmq_command_metadata "$command" usage | sed -n '1p')
   if [ -z "$ZSHMQ_PARSER_USAGE" ]; then
-    ZSHMQ_PARSER_USAGE="zshmq $command"
+    display_command=$(printf '%s' "$command" | tr '_' ' ')
+    ZSHMQ_PARSER_USAGE="zshmq $display_command"
   fi
   unset ZSHMQ_HELP ||:
   unset ZSHMQ_DEBUG ||:
