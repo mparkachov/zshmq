@@ -38,9 +38,14 @@ release: bootstrap $(ZSHMQ_BIN)
 			printf '\n'; \
 			sed '/^#!\/usr\/bin\/env sh/d' "$$vendor"; \
 		done; \
-		for lib in lib/command_helpers.sh lib/logging.sh lib/ctx_new.sh lib/ctx_destroy.sh lib/start.sh lib/stop.sh lib/send.sh lib/sub.sh; do \
+		printf '\n'; \
+		sed '/^#!\/usr\/bin\/env sh/d' "lib/command_helpers.sh"; \
+		printf '\n'; \
+		sed '/^#!\/usr\/bin\/env sh/d' "lib/logging.sh"; \
+		for lib in $$(cd lib && ls *.sh | sort); do \
+			case "$$lib" in command_helpers.sh|logging.sh) continue ;; esac; \
 			printf '\n'; \
-			sed '/^#!\/usr\/bin\/env sh/d' "$$lib"; \
+			sed '/^#!\/usr\/bin\/env sh/d' "lib/$$lib"; \
 		done; \
 		printf '\n'; \
 		tail -n +2 "$(ZSHMQ_BIN)"; \

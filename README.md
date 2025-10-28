@@ -1,6 +1,6 @@
 # Zero Shell Message Queue (zshmq)
 
-**Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message bus for POSIX shells**.
+**Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message topic for POSIX shells**.
 It provides a simple **publish/subscribe** mechanism using only **FIFOs (named pipes)** - no sockets, daemons, or dependencies.
 
 > Think of it as *ZeroMQ for the Unix shell* - pure inter-process messaging built entirely with standard POSIX tools.
@@ -13,7 +13,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
-- **ZeroMQ-like CLI:** Familiar commands (`send`, `sub`, `start`, etc.).
+- **ZeroMQ-like CLI:** Familiar commands (`dispatch`, `send`, `sub`, etc.).
 - **Tiny:** A single portable shell script.
 
 ---
@@ -45,16 +45,16 @@ It's perfect for:
 
 ```mermaid
 graph LR
-    P1[Publisher 1] --> B[( /tmp/zshmq/bus )]
+    P1[Publisher 1] --> B[( /tmp/zshmq/topic.fifo )]
     P2[Publisher 2] --> B
     B --> D[Dispatcher]
-    D --> S1[Subscriber A - Pattern: ^ALERT]
-    D --> S2[Subscriber B - Pattern: ^INFO]
+    D --> S1[Subscriber A (topic: topic)]
+    D --> S2[Subscriber B (topic: topic)]
 ```
 
-- Publishers write messages into /tmp/zshmq/bus.
-- The Dispatcher reads messages and routes them to subscribers whose patterns match.
-- Each Subscriber owns its own FIFO (e.g. /tmp/zshmq/sub.<pid>).
+- Publishers write messages into /tmp/zshmq/topic.fifo.
+- The Dispatcher reads messages and routes them to subscribers registered on that topic.
+- Each Subscriber owns its own FIFO (e.g. /tmp/zshmq/<topic>.<pid>).
 
 ## Installation
 
@@ -109,12 +109,6 @@ This creates a self-contained `zshmq` that embeds all library code without modif
 - `make release`
 
 ## Usage
-### Step 0: Bootstrap the runtime directory
-```sh
-zshmq ctx_new
-```
-Creates `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`), recreates the main FIFO bus, and truncates the subscription state so every session starts from a clean slate. Re-run this command whenever you need to reset the environment.
-
 List available commands (each supports `-h/--help` plus `-d/--debug` and `-t/--trace` for logging control):
 ```sh
 zshmq --help
@@ -122,110 +116,129 @@ zshmq --help
 
 Show command-specific usage:
 ```sh
-zshmq help ctx_new
+zshmq help ctx
 ```
 
-### Step 1: Start Dispatcher
+### Step 1: Bootstrap Runtime
 ```bash
-zshmq start
+zshmq ctx new
 ```
-Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx_new` to have prepared the runtime directory first and will exit with an error if the context is missing.
+Initialise the runtime directory (default `/tmp/zshmq`). Run this once per environment before creating topics or after cleaning up old sessions.
+
+### Step 2: Create Topic Assets
+```bash
+zshmq topic new -T topic
+```
+Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route.
+
+### Step 3: Start Dispatcher
+```bash
+zshmq dispatch start --topic topic
+```
+Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx new` to have prepared the runtime directory first and will exit with an error if the context is missing. Supply `--topic` to decide which FIFO/topic name the dispatcher should service.
 Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
 
-### Step 2: Subscribe to a Topic
+### Step 4: Subscribe to a Topic
 ```bash
-zshmq sub '^ALERT'
+zshmq sub --topic topic
 ```
-Creates /tmp/zshmq/sub.<pid>. Enable `-d/--debug` if you need connection logs; matching messages stream to stdout:
+Creates /tmp/zshmq/topic.<pid>. Enable `-d/--debug` if you need connection logs; messages for the topic stream to stdout:
 
-ALERT: CPU overload
+system overload
 
 The command runs until you interrupt it (Ctrl+C). On exit it deregisters from the dispatcher so future messages stop flowing to your FIFO.
 
-### Step 3: Publish Messages
+### Step 5: Publish Messages
 ```bash
-zshmq send "ALERT: CPU overload"
-zshmq send "INFO: Cooling active"
+zshmq send --topic topic "system overload"
+zshmq send --topic topic "cooling active"
 ```
-Messages are routed to subscribers with matching filters.
-`send` infers the topic from the text before the first colon (`ALERT` or `INFO` above); pass `-T <name>` / `--topic <name>` to override the inference when your payload lacks a colon. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
+Messages are routed to every subscriber registered on the `topic` topic. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
 
-### Step 4: List Active Subscribers
+### Step 6: List Active Subscribers
 ```bash
 zshmq list
 ```
 Example output:
 
-PID     FIFO                   PATTERN
-2314    /tmp/zshmq/sub.2314    ^ALERT
-2318    /tmp/zshmq/sub.2318    ^INFO
+PID     FIFO
+2314    /tmp/zshmq/topic.2314
+2318    /tmp/zshmq/topic.2318
 
-### Step 5: Unsubscribe
+### Step 7: Unsubscribe
 ```bash
 zshmq unsub
 ```
 Removes your FIFO and deregisters from the dispatcher.
 
-### Step 6: Stop Dispatcher
+### Step 8: Stop Dispatcher
 ```bash
-zshmq stop
+zshmq dispatch stop --topic topic
 ```
-Gracefully terminates the router and cleans up /tmp/zshmq/bus.
+Gracefully terminates the router for the supplied topic and cleans up /tmp/zshmq/topic.fifo.
 
-### Step 7: Destroy Runtime (optional)
+### Step 9: Destroy Runtime (optional)
 ```bash
-zshmq ctx_destroy
+zshmq ctx destroy
 ```
-Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`) when you are done testing.
+Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`). Use `--force` if additional files remain inside the runtime directory. Run `zshmq topic destroy -T <topic>` first if you only need to clean up specific topic assets.
 
 ### Command Reference
 Command	Description
-zshmq ctx_destroy	Remove the runtime directory (default: /tmp/zshmq) and its runtime files
-zshmq ctx_new	Create or reset the runtime directory, FIFO bus, and state file (default: /tmp/zshmq)
-zshmq start	Start the dispatcher process (use --foreground to stay attached to the terminal)
-zshmq send <message>	Publish a message (infers the topic from "<topic>: <message>" or use -T/--topic)
-zshmq sub <pattern>	Subscribe to matching messages
+zshmq ctx new [--path PATH]	Create or reset the runtime directory (default: /tmp/zshmq)
+zshmq ctx destroy [--force]	Remove the runtime directory (default: /tmp/zshmq); use --force to delete non-empty directories
+zshmq topic new -T <topic>	Create the FIFO and state file for the topic inside the runtime directory
+zshmq topic destroy -T <topic>	Remove the FIFO and state file for the topic
+zshmq dispatch start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
+zshmq send --topic <topic> <message>	Publish a message for the topic
+zshmq sub --topic <topic>	Subscribe to messages on the topic
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber
-zshmq stop	Stop the dispatcher
+zshmq dispatch stop --topic <topic>	Stop the dispatcher for a topic
 zshmq --help	Show usage
 zshmq --version	Display version info
 
 ### Environment Variables
 Variable	Default	Description
-ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx_new
-ZSHMQ_BUS	/tmp/zshmq/bus	Main FIFO path
-ZSHMQ_STATE	/tmp/zshmq/state	Subscription table
-ZSHMQ_DISPATCH_PID	/tmp/zshmq/dispatcher.pid	PID file tracked by start/stop
+ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx new
+ZSHMQ_TOPIC	/tmp/zshmq/topic.fifo	Main FIFO path
+ZSHMQ_STATE	/tmp/zshmq/topic.state	Subscription table
+ZSHMQ_DISPATCH_PID	/tmp/zshmq/topic.pid	PID file tracked by dispatch start/stop
 ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by -d/--debug and -t/--trace
 
 ### Example Session
 
-Terminal 1 - Dispatcher
+Terminal 1 - Setup
 ```bash
-zshmq start
+zshmq ctx new
+zshmq topic new -T topic
 ```
 
-Terminal 2 - Subscriber
+Terminal 2 - Dispatcher
 ```bash
-zshmq sub '^ALERT'
+zshmq dispatch start --topic topic
 ```
 
-Terminal 3 - Publisher
+Terminal 3 - Subscriber
 ```bash
-zshmq send "ALERT: Disk full"
-zshmq send "INFO: Backup started"
+zshmq sub --topic topic
+```
+
+Terminal 4 - Publisher
+```bash
+zshmq send --topic topic "Disk full"
+zshmq send --topic topic "Backup started"
 ```
 
 Subscriber Output
 ```bash
-ALERT: Disk full
+    ALERT: Disk full
 ```
 ## Implementation Summary
 
-- Dispatcher uses a blocking read on /tmp/zshmq/bus (no polling).
-- Subscriptions stored in /tmp/zshmq/state as PATTERN|FIFO.
-- Subscribers each have a private FIFO (/tmp/zshmq/sub.<pid>).
+- Dispatcher uses a blocking read on /tmp/zshmq/topic.fifo (no polling).
+- Subscriptions stored in /tmp/zshmq/topic.state with one FIFO per line.
+- Subscribers each have a private FIFO (/tmp/zshmq/<topic>.<pid>).
 - Multiple publishers supported (atomic writes up to PIPE_BUF).
 - Fully POSIX; no arrays or Bash-specific syntax.
 
@@ -233,7 +246,7 @@ ALERT: Disk full
 
 - One reader per FIFO (FIFO property).
 - No guaranteed delivery or message persistence.
-- Filtering uses shell patterns (case), not full regex.
+- No message-level filtering; dispatch is scoped entirely by topic.
 - Single host only (no networking).
 - Single broker per machine because all instances share the /tmp/zshmq/ directory.
 

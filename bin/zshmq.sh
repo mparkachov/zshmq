@@ -29,13 +29,11 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
 
   # Load command implementations after helper definitions.
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/ctx_new.sh"
+  . "${ZSHMQ_ROOT}/lib/ctx.sh"
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/ctx_destroy.sh"
+  . "${ZSHMQ_ROOT}/lib/topic.sh"
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/start.sh"
-  # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/stop.sh"
+  . "${ZSHMQ_ROOT}/lib/dispatch.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/send.sh"
   # shellcheck disable=SC1091
@@ -104,17 +102,14 @@ case $command_name in
     printf '%s\n' "${ZSHMQ_VERSION:-0.0.0}"
     exit 0
     ;;
-  ctx_new)
-    ctx_new "$@"
+  ctx)
+    ctx "$@"
     ;;
-  ctx_destroy)
-    ctx_destroy "$@"
+  topic)
+    topic "$@"
     ;;
-  start)
-    start "$@"
-    ;;
-  stop)
-    stop "$@"
+  dispatch)
+    dispatch "$@"
     ;;
   send)
     send "$@"

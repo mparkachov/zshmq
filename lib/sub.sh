@@ -2,11 +2,12 @@
 # shellcheck shell=sh
 
 #/**
-# sub - Subscribe to messages that match a topic pattern.
-# @usage: zshmq sub [--path PATH] PATTERN
-# @summary: Register a subscriber FIFO and print dispatched messages for PATTERN.
-# @description: Validate the runtime directory, ensure the dispatcher is running, register the subscription with the dispatcher, and stream matching messages until interrupted.
+# sub - Subscribe to messages for a specific topic.
+# @usage: zshmq sub --topic TOPIC [--path PATH]
+# @summary: Register a subscriber FIFO and stream dispatched messages for TOPIC.
+# @description: Validate the runtime directory, ensure the dispatcher is running, register the subscription with the dispatcher, and stream messages until interrupted.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name to subscribe to.
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
@@ -15,6 +16,7 @@
 sub_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to target'
+  param SUB_TOPIC -T --topic -- 'Topic name to subscribe to'
 }
 
 sub_extract_fifo_pid() {
@@ -35,13 +37,12 @@ sub_prune_state() {
   state_path=$1
   tmp_state="${state_path}.prune.$$"
   : > "$tmp_state"
-  while IFS='|' read -r existing_pattern existing_fifo || [ -n "$existing_pattern" ]; do
-    [ -n "$existing_pattern" ] || continue
+  while IFS= read -r existing_fifo || [ -n "$existing_fifo" ]; do
     [ -n "$existing_fifo" ] || continue
     fifo_pid=$(sub_extract_fifo_pid "$existing_fifo")
     if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
       if [ -p "$existing_fifo" ]; then
-        printf '%s|%s\n' "$existing_pattern" "$existing_fifo" >> "$tmp_state"
+        printf '%s\n' "$existing_fifo" >> "$tmp_state"
       fi
     else
       rm -f "$existing_fifo" 2>/dev/null || :
@@ -60,9 +61,9 @@ sub_cleanup() {
     eval "exec ${SUB_FIFO_FD}>&-" 2>/dev/null || :
   fi
 
-  if [ "${SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${SUB_BUS_PATH:-}" ] && [ -n "${SUB_PATTERN:-}" ] && [ -n "${SUB_FIFO_PATH:-}" ]; then
+  if [ "${SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${SUB_TOPIC_FIFO_PATH:-}" ] && [ -n "${SUB_FIFO_PATH:-}" ]; then
     if [ -n "${SUB_DISPATCHER_PID:-}" ] && kill -0 "$SUB_DISPATCHER_PID" 2>/dev/null; then
-      { printf 'UNSUB|%s|%s\n' "$SUB_PATTERN" "$SUB_FIFO_PATH"; } > "$SUB_BUS_PATH" 2>/dev/null || :
+      { printf 'UNSUB|%s\n' "$SUB_FIFO_PATH"; } > "$SUB_TOPIC_FIFO_PATH" 2>/dev/null || :
     fi
     SUB_REGISTERED=0
   fi
@@ -72,16 +73,15 @@ sub_cleanup() {
     : > "$tmp_state"
     while IFS= read -r state_line || [ -n "$state_line" ]; do
       [ -n "$state_line" ] || continue
-      state_pattern=${state_line%%|*}
-      state_fifo=${state_line#*|}
-      if [ "${state_pattern}|${state_fifo}" = "${SUB_PATTERN:-}|${SUB_FIFO_PATH:-}" ]; then
+      state_fifo=$state_line
+      if [ "$state_fifo" = "${SUB_FIFO_PATH:-}" ]; then
         rm -f "$state_fifo" 2>/dev/null || :
         continue
       fi
       fifo_pid=$(sub_extract_fifo_pid "$state_fifo")
       if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
         if [ -p "$state_fifo" ]; then
-          printf '%s|%s\n' "$state_pattern" "$state_fifo" >> "$tmp_state"
+          printf '%s\n' "$state_fifo" >> "$tmp_state"
         fi
       else
         rm -f "$state_fifo" 2>/dev/null || :
@@ -128,38 +128,16 @@ sub() {
       ;;
   esac
 
-  if [ $# -eq 0 ]; then
-    zshmq_log_error 'sub: pattern is required'
-    return 1
-  fi
-
-  pattern=$1
-  shift || :
-
   if [ $# -gt 0 ]; then
     zshmq_log_error 'sub: unexpected argument -- %s' "$1"
     return 1
   fi
 
-  if [ -z "$pattern" ]; then
-    zshmq_log_error 'sub: pattern must not be empty'
+  topic=${SUB_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'sub: --topic is required'
     return 1
   fi
-
-  case $pattern in
-    *'|'*)
-      zshmq_log_error 'sub: pattern must not contain "|"'
-      return 1
-      ;;
-  esac
-
-  case $pattern in
-    *'
-'*)
-      zshmq_log_error 'sub: pattern must not contain newlines'
-      return 1
-      ;;
-  esac
 
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
@@ -181,17 +159,17 @@ sub() {
   fi
 
   runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/bus}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/dispatcher.pid}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
+  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -f "$state_path" ]; then
     zshmq_log_error 'sub: state file not found at %s' "$state_path"
     return 1
   fi
 
-  if [ ! -p "$bus_path" ]; then
-    zshmq_log_error 'sub: bus FIFO not found at %s' "$bus_path"
+  if [ ! -p "$topic_fifo_path" ]; then
+    zshmq_log_error 'sub: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
@@ -208,7 +186,7 @@ sub() {
 
   SUB_DISPATCHER_PID=$dispatcher_pid
 
-  fifo_path=${runtime_root}/sub.$$
+  fifo_path=${runtime_root}/${topic}.$$
   if [ -e "$fifo_path" ]; then
     zshmq_log_error 'sub: subscriber fifo already exists at %s' "$fifo_path"
     return 1
@@ -219,8 +197,7 @@ sub() {
     return 1
   fi
 
-  SUB_PATTERN=$pattern
-  SUB_BUS_PATH=$bus_path
+  SUB_TOPIC_FIFO_PATH=$topic_fifo_path
   SUB_FIFO_PATH=$fifo_path
   SUB_FIFO_FD=9
   SUB_CLEANED=0
@@ -236,7 +213,7 @@ sub() {
   trap 'sub_cleanup; exit 129' HUP
   trap 'sub_cleanup' EXIT
 
-  if ! { printf 'SUB|%s|%s\n' "$pattern" "$fifo_path"; } > "$bus_path"; then
+  if ! { printf 'SUB|%s\n' "$fifo_path"; } > "$topic_fifo_path"; then
     zshmq_log_error 'sub: failed to register with dispatcher'
     sub_cleanup
     return 1
@@ -249,10 +226,10 @@ sub() {
     return 1
   fi
 
-  zshmq_log_debug 'sub: subscribed to pattern=%s fifo=%s' "$pattern" "$fifo_path"
+  zshmq_log_debug 'sub: subscribed to topic=%s fifo=%s' "$topic" "$fifo_path"
 
   while IFS= read -r line <&9 || [ -n "$line" ]; do
-    zshmq_log_trace 'sub: received pattern=%s message=%s' "$pattern" "$line"
+    zshmq_log_trace 'sub: received topic=%s message=%s' "$topic" "$line"
     printf '%s\n' "$line"
   done
 

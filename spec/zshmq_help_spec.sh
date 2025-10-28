@@ -3,52 +3,62 @@ Describe 'zshmq --help'
     When run ./bin/zshmq.sh --help
     The status should be success
     The stdout should include 'Commands:'
-    The stdout should include 'ctx_new - Bootstrap the runtime directory (default: /tmp/zshmq) and transport primitives.'
-    The stdout should include 'ctx_destroy - Remove the runtime directory (default: /tmp/zshmq) and its runtime files.'
-    The stdout should include 'start - Launch the dispatcher (default root: /tmp/zshmq) in the background.'
-    The stdout should include 'stop - Stop the dispatcher running for the given runtime directory (default: /tmp/zshmq).'
+    The stdout should include 'ctx - Manage the runtime directory (default: /tmp/zshmq).'
+    The stdout should include 'topic - Manage topic FIFOs and state files.'
+    The stdout should include 'dispatch - Start or stop the dispatcher that routes messages for a topic.'
     The stdout should include 'send - Publish a message through the dispatcher FIFO.'
     The stdout should include 'Each command supports -h/--help plus -d/--debug and -t/--trace for log verbosity.'
-    The stdout should not include 'Command: ctx_new'
-    The stdout should not include 'Command: ctx_destroy'
+    The stdout should not include 'Command: ctx'
+    The stdout should not include 'Command: topic'
     The stdout should not include 'Command: start'
     The stdout should not include 'Command: stop'
-    The stdout should not include 'Command: send'
   End
 End
 
-Describe 'zshmq ctx_new --help'
+Describe 'zshmq ctx --help'
   It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh ctx_new --help
+    When run ./bin/zshmq.sh ctx --help
     The status should be success
-    The stdout should include 'Command: ctx_new'
+    The stdout should include 'Usage: zshmq ctx <command>'
+    The stdout should include 'new      Initialise the runtime directory'
+    The stdout should include 'destroy  Remove the runtime directory (use --force to ignore leftovers)'
+  End
+End
+
+Describe 'zshmq topic --help'
+  It 'shows command-specific documentation'
+    When run ./bin/zshmq.sh topic --help
+    The status should be success
+    The stdout should include 'Usage: zshmq topic <command>'
+    The stdout should include 'new      Initialise topic assets (-T/--topic required)'
+    The stdout should include 'destroy  Remove topic assets    (-T/--topic required)'
+  End
+End
+
+Describe 'zshmq dispatch --help'
+  It 'shows command-specific documentation'
+    When run ./bin/zshmq.sh dispatch --help
+    The status should be success
+    The stdout should include 'Usage: zshmq dispatch <command>'
+    The stdout should include 'start  Launch the dispatcher for a topic'
+    The stdout should include 'stop   Terminate the dispatcher for a topic'
+  End
+End
+
+Describe 'zshmq dispatch start --help'
+  It 'shows command-specific documentation'
+    When run ./bin/zshmq.sh dispatch start --help
+    The status should be success
+    The stdout should include 'Command: dispatch start'
     The stdout should include 'Options:'
   End
 End
 
-Describe 'zshmq ctx_destroy --help'
+Describe 'zshmq dispatch stop --help'
   It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh ctx_destroy --help
+    When run ./bin/zshmq.sh dispatch stop --help
     The status should be success
-    The stdout should include 'Command: ctx_destroy'
-    The stdout should include 'Options:'
-  End
-End
-
-Describe 'zshmq start --help'
-  It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh start --help
-    The status should be success
-    The stdout should include 'Command: start'
-    The stdout should include 'Options:'
-  End
-End
-
-Describe 'zshmq stop --help'
-  It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh stop --help
-    The status should be success
-    The stdout should include 'Command: stop'
+    The stdout should include 'Command: dispatch stop'
     The stdout should include 'Options:'
   End
 End
