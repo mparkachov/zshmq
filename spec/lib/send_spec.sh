@@ -39,7 +39,7 @@ Describe 'send'
       while IFS= read -r line; do
         printf '%s\n' "$line" >> "$SEND_SPEC_CAPTURE"
         break
-      done < "${ZSHMQ_CTX_ROOT}/bus.topic"
+      done < "${ZSHMQ_CTX_ROOT}/bus.fifo"
     } &
     SEND_SPEC_READER_PID=$!
     ( sleep 60 ) &

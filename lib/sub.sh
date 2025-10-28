@@ -61,9 +61,9 @@ sub_cleanup() {
     eval "exec ${SUB_FIFO_FD}>&-" 2>/dev/null || :
   fi
 
-  if [ "${SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${SUB_BUS_PATH:-}" ] && [ -n "${SUB_FIFO_PATH:-}" ]; then
+  if [ "${SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${SUB_TOPIC_FIFO_PATH:-}" ] && [ -n "${SUB_FIFO_PATH:-}" ]; then
     if [ -n "${SUB_DISPATCHER_PID:-}" ] && kill -0 "$SUB_DISPATCHER_PID" 2>/dev/null; then
-      { printf 'UNSUB|%s\n' "$SUB_FIFO_PATH"; } > "$SUB_BUS_PATH" 2>/dev/null || :
+      { printf 'UNSUB|%s\n' "$SUB_FIFO_PATH"; } > "$SUB_TOPIC_FIFO_PATH" 2>/dev/null || :
     fi
     SUB_REGISTERED=0
   fi
@@ -160,7 +160,7 @@ sub() {
 
   runtime_root=${target%/}
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -f "$state_path" ]; then
@@ -168,8 +168,8 @@ sub() {
     return 1
   fi
 
-  if [ ! -p "$bus_path" ]; then
-    zshmq_log_error 'sub: bus FIFO not found at %s' "$bus_path"
+  if [ ! -p "$topic_fifo_path" ]; then
+    zshmq_log_error 'sub: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
@@ -197,7 +197,7 @@ sub() {
     return 1
   fi
 
-  SUB_BUS_PATH=$bus_path
+  SUB_TOPIC_FIFO_PATH=$topic_fifo_path
   SUB_FIFO_PATH=$fifo_path
   SUB_FIFO_FD=9
   SUB_CLEANED=0
@@ -213,7 +213,7 @@ sub() {
   trap 'sub_cleanup; exit 129' HUP
   trap 'sub_cleanup' EXIT
 
-  if ! { printf 'SUB|%s\n' "$fifo_path"; } > "$bus_path"; then
+  if ! { printf 'SUB|%s\n' "$fifo_path"; } > "$topic_fifo_path"; then
     zshmq_log_error 'sub: failed to register with dispatcher'
     sub_cleanup
     return 1

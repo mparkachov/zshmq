@@ -27,7 +27,7 @@ Write a ShellSpec file for every module under `lib/`. Name contexts after the co
 Foreground-oriented workflows (e.g., `sub`, `start --foreground`) must be validated manually; avoid exercising long-lived streaming loops from ShellSpec to prevent hangs.
 
 ## Commit & Pull Request Guidelines
-Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh send --topic bus "test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
+Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh send --topic topic "test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
 
 ## Security & Environment Tips
-Never commit actual FIFOs or files created in `/tmp`. Sanitize topic names received from users before interpolation. When testing locally, override `ZSHMQ_BUS` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_BUS=$PWD/tmp/bus.topic`). Clean up stray FIFOs with `./bin/zshmq.sh stop` or manual `rm` to prevent resource leaks.
+Never commit actual FIFOs or files created in `/tmp`. Sanitize topic names received from users before interpolation. When testing locally, override `ZSHMQ_TOPIC` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_TOPIC=$PWD/tmp/topic.fifo`). Clean up stray FIFOs with `./bin/zshmq.sh stop --topic <topic>` or manual `rm` to prevent resource leaks.

@@ -63,10 +63,26 @@ ctx_destroy_impl() {
     return 0
   fi
 
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/bus.pid}
-  if [ -f "$pid_path" ]; then
-    rm -f "$pid_path"
-    zshmq_log_debug 'ctx destroy: removed pid=%s' "$pid_path"
+  if [ -n "${ZSHMQ_DISPATCH_PID:-}" ]; then
+    pid_path=$ZSHMQ_DISPATCH_PID
+    if [ -f "$pid_path" ]; then
+      rm -f "$pid_path"
+      zshmq_log_debug 'ctx destroy: removed pid=%s' "$pid_path"
+    else
+      zshmq_log_trace 'ctx destroy: pid missing (%s)' "$pid_path"
+    fi
+  else
+    removed_pid=0
+    for candidate in "$runtime_root"/*.pid; do
+      if [ -f "$candidate" ]; then
+        rm -f "$candidate"
+        zshmq_log_debug 'ctx destroy: removed pid=%s' "$candidate"
+        removed_pid=1
+      fi
+    done
+    if [ "$removed_pid" -eq 0 ]; then
+      zshmq_log_trace 'ctx destroy: pid missing (%s/*.pid)' "$runtime_root"
+    fi
   fi
 
   remaining=$(find "$runtime_root" -mindepth 1 -maxdepth 1 -not -name '.' -not -name '..' -print -quit 2>/dev/null || :)

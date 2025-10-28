@@ -112,7 +112,7 @@ topic_new() {
   topic_name=$2
 
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic_name}.state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic_name}.topic}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic_name}.fifo}
 
   case $state_path in
     */*)
@@ -132,29 +132,29 @@ topic_new() {
   fi
   : > "$state_path"
 
-  case $bus_path in
+  case $topic_fifo_path in
     */*)
-      bus_dir=${bus_path%/*}
+      topic_dir=${topic_fifo_path%/*}
       ;;
     *)
-      bus_dir=.
+      topic_dir=.
       ;;
   esac
-  if [ "$bus_dir" != "." ] && [ ! -d "$bus_dir" ]; then
-    mkdir -p "$bus_dir"
+  if [ "$topic_dir" != "." ] && [ ! -d "$topic_dir" ]; then
+    mkdir -p "$topic_dir"
   fi
 
-  if [ -e "$bus_path" ]; then
-    if [ -p "$bus_path" ]; then
-      rm -f "$bus_path"
+  if [ -e "$topic_fifo_path" ]; then
+    if [ -p "$topic_fifo_path" ]; then
+      rm -f "$topic_fifo_path"
     else
-      zshmq_log_error 'topic new: bus path is not a FIFO: %s' "$bus_path"
+      zshmq_log_error 'topic new: topic FIFO path is not a FIFO: %s' "$topic_fifo_path"
       return 1
     fi
   fi
 
-  if ! mkfifo "$bus_path"; then
-    zshmq_log_error 'topic new: failed to create fifo at %s' "$bus_path"
+  if ! mkfifo "$topic_fifo_path"; then
+    zshmq_log_error 'topic new: failed to create fifo at %s' "$topic_fifo_path"
     return 1
   fi
 
@@ -166,7 +166,7 @@ topic_destroy() {
   topic_name=$2
 
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic_name}.state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic_name}.topic}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic_name}.fifo}
 
   if [ -f "$state_path" ]; then
     rm -f "$state_path"
@@ -175,11 +175,11 @@ topic_destroy() {
     zshmq_log_trace 'topic destroy: state missing (%s)' "$state_path"
   fi
 
-  if [ -p "$bus_path" ] || [ -f "$bus_path" ]; then
-    rm -f "$bus_path"
-    zshmq_log_debug 'topic destroy: removed fifo=%s' "$bus_path"
+  if [ -p "$topic_fifo_path" ] || [ -f "$topic_fifo_path" ]; then
+    rm -f "$topic_fifo_path"
+    zshmq_log_debug 'topic destroy: removed fifo=%s' "$topic_fifo_path"
   else
-    zshmq_log_trace 'topic destroy: fifo missing (%s)' "$bus_path"
+    zshmq_log_trace 'topic destroy: fifo missing (%s)' "$topic_fifo_path"
   fi
 }
 

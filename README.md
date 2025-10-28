@@ -1,6 +1,6 @@
 # Zero Shell Message Queue (zshmq)
 
-**Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message bus for POSIX shells**.
+**Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message topic for POSIX shells**.
 It provides a simple **publish/subscribe** mechanism using only **FIFOs (named pipes)** - no sockets, daemons, or dependencies.
 
 > Think of it as *ZeroMQ for the Unix shell* - pure inter-process messaging built entirely with standard POSIX tools.
@@ -45,14 +45,14 @@ It's perfect for:
 
 ```mermaid
 graph LR
-    P1[Publisher 1] --> B[( /tmp/zshmq/bus.topic )]
+    P1[Publisher 1] --> B[( /tmp/zshmq/topic.fifo )]
     P2[Publisher 2] --> B
     B --> D[Dispatcher]
-    D --> S1[Subscriber A (topic: bus)]
-    D --> S2[Subscriber B (topic: bus)]
+    D --> S1[Subscriber A (topic: topic)]
+    D --> S2[Subscriber B (topic: topic)]
 ```
 
-- Publishers write messages into /tmp/zshmq/bus.topic.
+- Publishers write messages into /tmp/zshmq/topic.fifo.
 - The Dispatcher reads messages and routes them to subscribers registered on that topic.
 - Each Subscriber owns its own FIFO (e.g. /tmp/zshmq/<topic>.<pid>).
 
@@ -127,22 +127,22 @@ Initialise the runtime directory (default `/tmp/zshmq`). Run this once per envir
 
 ### Step 2: Create Topic Assets
 ```bash
-zshmq topic new -T bus
+zshmq topic new -T topic
 ```
-Creates the FIFO (`bus.topic`) and state file (`bus.state`) used by the dispatcher. Repeat for each topic you plan to route.
+Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route.
 
 ### Step 3: Start Dispatcher
 ```bash
-zshmq start --topic bus
+zshmq start --topic topic
 ```
-Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx new` to have prepared the runtime directory first and will exit with an error if the context is missing. Supply `--topic` to decide which FIFO/bus name the dispatcher should service.
+Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx new` to have prepared the runtime directory first and will exit with an error if the context is missing. Supply `--topic` to decide which FIFO/topic name the dispatcher should service.
 Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
 
 ### Step 4: Subscribe to a Topic
 ```bash
-zshmq sub --topic bus
+zshmq sub --topic topic
 ```
-Creates /tmp/zshmq/bus.<pid>. Enable `-d/--debug` if you need connection logs; messages for the topic stream to stdout:
+Creates /tmp/zshmq/topic.<pid>. Enable `-d/--debug` if you need connection logs; messages for the topic stream to stdout:
 
 system overload
 
@@ -150,10 +150,10 @@ The command runs until you interrupt it (Ctrl+C). On exit it deregisters from th
 
 ### Step 5: Publish Messages
 ```bash
-zshmq send --topic bus "system overload"
-zshmq send --topic bus "cooling active"
+zshmq send --topic topic "system overload"
+zshmq send --topic topic "cooling active"
 ```
-Messages are routed to every subscriber registered on the `bus` topic. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
+Messages are routed to every subscriber registered on the `topic` topic. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
 
 ### Step 6: List Active Subscribers
 ```bash
@@ -162,8 +162,8 @@ zshmq list
 Example output:
 
 PID     FIFO
-2314    /tmp/zshmq/bus.2314
-2318    /tmp/zshmq/bus.2318
+2314    /tmp/zshmq/topic.2314
+2318    /tmp/zshmq/topic.2318
 
 ### Step 7: Unsubscribe
 ```bash
@@ -173,9 +173,9 @@ Removes your FIFO and deregisters from the dispatcher.
 
 ### Step 8: Stop Dispatcher
 ```bash
-zshmq stop
+zshmq stop --topic topic
 ```
-Gracefully terminates the router and cleans up /tmp/zshmq/bus.topic.
+Gracefully terminates the router for the supplied topic and cleans up /tmp/zshmq/topic.fifo.
 
 ### Step 9: Destroy Runtime (optional)
 ```bash
@@ -194,16 +194,16 @@ zshmq send --topic <topic> <message>	Publish a message for the topic
 zshmq sub --topic <topic>	Subscribe to messages on the topic
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber
-zshmq stop	Stop the dispatcher
+zshmq stop --topic <topic>	Stop the dispatcher for a topic
 zshmq --help	Show usage
 zshmq --version	Display version info
 
 ### Environment Variables
 Variable	Default	Description
 ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx new
-ZSHMQ_BUS	/tmp/zshmq/bus.topic	Main FIFO path
-ZSHMQ_STATE	/tmp/zshmq/bus.state	Subscription table
-ZSHMQ_DISPATCH_PID	/tmp/zshmq/bus.pid	PID file tracked by start/stop
+ZSHMQ_TOPIC	/tmp/zshmq/topic.fifo	Main FIFO path
+ZSHMQ_STATE	/tmp/zshmq/topic.state	Subscription table
+ZSHMQ_DISPATCH_PID	/tmp/zshmq/topic.pid	PID file tracked by start/stop
 ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by -d/--debug and -t/--trace
 
 ### Example Session
@@ -211,23 +211,23 @@ ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO
 Terminal 1 - Setup
 ```bash
 zshmq ctx new
-zshmq topic new -T bus
+zshmq topic new -T topic
 ```
 
 Terminal 2 - Dispatcher
 ```bash
-zshmq start --topic bus
+zshmq start --topic topic
 ```
 
 Terminal 3 - Subscriber
 ```bash
-zshmq sub --topic bus
+zshmq sub --topic topic
 ```
 
 Terminal 4 - Publisher
 ```bash
-zshmq send --topic bus "Disk full"
-zshmq send --topic bus "Backup started"
+zshmq send --topic topic "Disk full"
+zshmq send --topic topic "Backup started"
 ```
 
 Subscriber Output
@@ -236,8 +236,8 @@ Subscriber Output
 ```
 ## Implementation Summary
 
-- Dispatcher uses a blocking read on /tmp/zshmq/bus.topic (no polling).
-- Subscriptions stored in /tmp/zshmq/bus.state with one FIFO per line.
+- Dispatcher uses a blocking read on /tmp/zshmq/topic.fifo (no polling).
+- Subscriptions stored in /tmp/zshmq/topic.state with one FIFO per line.
 - Subscribers each have a private FIFO (/tmp/zshmq/<topic>.<pid>).
 - Multiple publishers supported (atomic writes up to PIPE_BUF).
 - Fully POSIX; no arrays or Bash-specific syntax.

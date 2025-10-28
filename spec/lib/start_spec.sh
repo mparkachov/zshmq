@@ -12,10 +12,43 @@ Describe 'start'
     rm -rf "$ZSHMQ_CTX_ROOT"
   }
 
-  after_each() {
-    if [ -d "$ZSHMQ_CTX_ROOT" ]; then
-      stop --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1 || :
+  stop_all_dispatchers() {
+    if [ ! -d "$ZSHMQ_CTX_ROOT" ]; then
+      return 0
     fi
+
+    attempts=0
+    while [ "$attempts" -lt 10 ]; do
+      pid_file=
+      for candidate in "$ZSHMQ_CTX_ROOT"/*.pid; do
+        if [ -f "$candidate" ]; then
+          pid_file=$candidate
+          break
+        fi
+      done
+
+      if [ -z "$pid_file" ]; then
+        break
+      fi
+
+      stop --path "$ZSHMQ_CTX_ROOT" >/dev/null 2>&1 || :
+      attempts=$((attempts + 1))
+    done
+
+    for candidate in "$ZSHMQ_CTX_ROOT"/*.pid; do
+      if [ -f "$candidate" ]; then
+        dispatcher_pid=$(cat "$candidate" 2>/dev/null || :)
+        if [ -n "$dispatcher_pid" ]; then
+          kill "$dispatcher_pid" >/dev/null 2>&1 || :
+          wait "$dispatcher_pid" 2>/dev/null || :
+        fi
+        rm -f "$candidate" 2>/dev/null || :
+      fi
+    done
+  }
+
+  after_each() {
+    stop_all_dispatchers
   }
 
   BeforeEach 'before_each'
@@ -59,7 +92,28 @@ Describe 'start'
     ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
     When run start --path "$ZSHMQ_CTX_ROOT" --topic bus
     The status should be failure
-    The stderr should include '[ERROR] start: bus FIFO not found'
+    The stderr should include '[ERROR] start: topic FIFO not found'
+  End
+
+  It 'supports concurrent dispatchers for distinct topics'
+    ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+    topic --path "$ZSHMQ_CTX_ROOT" new -T alerts >/dev/null 2>&1
+
+    start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
+    bus_pid=$(cat "$ZSHMQ_CTX_ROOT/bus.pid" 2>/dev/null || :)
+    kill -0 "$bus_pid"
+
+    When run start --path "$ZSHMQ_CTX_ROOT" --topic alerts
+    The status should be success
+    The stderr should equal ''
+
+    alerts_pid=$(cat "$ZSHMQ_CTX_ROOT/alerts.pid" 2>/dev/null || :)
+    The path "$ZSHMQ_CTX_ROOT/bus.pid" should be file
+    The path "$ZSHMQ_CTX_ROOT/alerts.pid" should be file
+    The variable bus_pid should not equal "$alerts_pid"
+    kill -0 "$bus_pid"
+    kill -0 "$alerts_pid"
   End
 
   start_trace_log_helper() {
@@ -69,10 +123,10 @@ Describe 'start'
     trace_log="$SHELLSPEC_TMPDIR/start_trace.log"
     : > "$trace_log"
 
-    zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/bus.topic" "${ZSHMQ_CTX_ROOT}/bus.state" 2>"$trace_log" &
+    zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/bus.fifo" "${ZSHMQ_CTX_ROOT}/bus.state" 2>"$trace_log" &
     dispatcher_pid=$!
 
-    printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/bus.topic"
+    printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/bus.fifo"
 
     attempts=0
     while [ "$attempts" -lt 50 ]; do

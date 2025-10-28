@@ -5,7 +5,7 @@
 # send - Publish a message to the zshmq dispatcher.
 # @usage: zshmq send --topic TOPIC [--path PATH] MESSAGE...
 # @summary: Publish a message through the dispatcher FIFO.
-# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the topic-specific bus so subscribers receive it.
+# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the topic-specific FIFO so subscribers receive it.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -T, --topic TOPIC  Topic name for the published message (required).
 # @option: -d, --debug        Enable DEBUG log level.
@@ -104,7 +104,7 @@ send() {
   esac
 
   runtime_root=${target%/}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -d "$target" ]; then
@@ -112,8 +112,8 @@ send() {
     return 1
   fi
 
-  if [ ! -p "$bus_path" ]; then
-    zshmq_log_error 'send: bus FIFO not found at %s' "$bus_path"
+  if [ ! -p "$topic_fifo_path" ]; then
+    zshmq_log_error 'send: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
@@ -129,7 +129,7 @@ send() {
   fi
 
   zshmq_log_trace 'send: topic=%s message=%s' "$topic" "$body"
-  printf 'PUB|%s|%s\n' "$topic" "$body" > "$bus_path"
+  printf 'PUB|%s|%s\n' "$topic" "$body" > "$topic_fifo_path"
 }
 
 if command -v zshmq_register_command >/dev/null 2>&1; then

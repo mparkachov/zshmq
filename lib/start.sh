@@ -5,7 +5,7 @@
 # start - Launch the dispatcher loop for zshmq.
 # @usage: zshmq start --topic TOPIC [--path PATH]
 # @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
-# @description: Validate an existing runtime directory created by ctx new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main FIFO bus.
+# @description: Validate an existing runtime directory created by ctx new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main topic FIFO.
 # @option: -p, --path PATH    Runtime directory to initialise (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -T, --topic TOPIC  Topic name handled by this dispatcher.
 # @option: -f, --foreground   Run the dispatcher in the foreground.
@@ -54,13 +54,13 @@ dispatcher_prune_state() {
 }
 
 zshmq_dispatch_loop() {
-  bus_path=$1
+  topic_fifo_path=$1
   state_path=$2
 
   trap 'exec 3>&-; exit 0' INT TERM HUP
 
   # Keep the FIFO open even when no writers are connected.
-  exec 3<>"$bus_path"
+  exec 3<>"$topic_fifo_path"
 
   while IFS= read -r line <&3; do
     case $line in
@@ -183,7 +183,7 @@ start() {
 
   runtime_root=${target%/}
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
-  bus_path=${ZSHMQ_BUS:-${runtime_root}/${topic}.topic}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -d "$target" ]; then
@@ -191,8 +191,8 @@ start() {
     return 1
   fi
 
-  if [ ! -p "$bus_path" ]; then
-    zshmq_log_error 'start: bus FIFO not found at %s' "$bus_path"
+  if [ ! -p "$topic_fifo_path" ]; then
+    zshmq_log_error 'start: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
@@ -211,7 +211,7 @@ start() {
   fi
 
   if [ "${START_FOREGROUND:-0}" = "1" ]; then
-    zshmq_dispatch_loop "$bus_path" "$state_path" &
+    zshmq_dispatch_loop "$topic_fifo_path" "$state_path" &
     dispatcher_pid=$!
     printf '%s\n' "$dispatcher_pid" > "$pid_path"
     zshmq_log_debug 'Dispatcher started (pid=%s)' "$dispatcher_pid"
@@ -244,7 +244,7 @@ start() {
     return "$wait_status"
   fi
 
-  zshmq_dispatch_loop "$bus_path" "$state_path" &
+  zshmq_dispatch_loop "$topic_fifo_path" "$state_path" &
   dispatcher_pid=$!
   printf '%s\n' "$dispatcher_pid" > "$pid_path"
   zshmq_log_debug 'Dispatcher started (pid=%s)' "$dispatcher_pid"

@@ -21,10 +21,17 @@ Describe 'stop'
   BeforeEach 'before_each'
   AfterEach 'after_each'
 
-  It 'stops a running dispatcher and removes the pid file'
+  It 'stops a running dispatcher for the requested topic'
     start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
-    pid_before=$(cat "$ZSHMQ_CTX_ROOT/bus.pid")
-    When run stop --path "$ZSHMQ_CTX_ROOT"
+    When run stop --path "$ZSHMQ_CTX_ROOT" --topic bus
+    The status should be success
+    The stderr should equal ''
+    The path "$ZSHMQ_CTX_ROOT/bus.pid" should not exist
+  End
+
+  It 'stops a dispatcher by topic using default runtime'
+    start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
+    When run stop --topic bus
     The status should be success
     The stderr should equal ''
     The path "$ZSHMQ_CTX_ROOT/bus.pid" should not exist

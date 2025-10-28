@@ -3,10 +3,11 @@
 
 #/**
 # stop - Terminate the zshmq dispatcher loop.
-# @usage: zshmq stop [--path PATH]
+# @usage: zshmq stop [--path PATH] [--topic TOPIC]
 # @summary: Stop the dispatcher running for the given runtime directory (default: /tmp/zshmq).
 # @description: Read the dispatcher PID from the runtime directory, send it SIGTERM, and remove the PID file once the dispatcher exits.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name whose dispatcher should be stopped.
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
@@ -15,6 +16,7 @@
 stop_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to target'
+  param STOP_TOPIC -T --topic -- 'Topic whose dispatcher should be stopped'
 }
 
 stop() {
@@ -57,6 +59,17 @@ stop() {
 
   unset ZSHMQ_REST ||:
 
+  topic=${STOP_TOPIC:-}
+  if [ -n "$topic" ]; then
+    case $topic in
+      *'|'*|*'/'*|*'
+'*)
+        zshmq_log_error 'stop: topic contains invalid characters'
+        return 1
+        ;;
+    esac
+  fi
+
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
@@ -72,9 +85,35 @@ stop() {
   esac
 
   runtime_root=${target%/}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/bus.pid}
+  pid_path=${ZSHMQ_DISPATCH_PID:-}
 
-  if [ ! -f "$pid_path" ]; then
+  if [ -n "$topic" ]; then
+    pid_path=${runtime_root}/${topic}.pid
+  elif [ -z "$pid_path" ] && [ -n "${ZSHMQ_TOPIC:-}" ]; then
+    topic_override=${ZSHMQ_TOPIC%.fifo}
+    case $topic_override in
+      /*)
+        pid_path=${topic_override}.pid
+        ;;
+      '')
+        pid_path=
+        ;;
+      *)
+        pid_path=${runtime_root}/${topic_override}.pid
+        ;;
+    esac
+  fi
+
+  if [ -z "$pid_path" ] || [ ! -f "$pid_path" ]; then
+    for candidate in "$runtime_root"/*.pid; do
+      if [ -f "$candidate" ]; then
+        pid_path=$candidate
+        break
+      fi
+    done
+  fi
+
+  if [ -z "$pid_path" ] || [ ! -f "$pid_path" ]; then
     zshmq_log_debug 'Dispatcher is not running.'
     return 0
   fi
