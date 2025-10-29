@@ -45,11 +45,11 @@ It's perfect for:
 
 ```mermaid
 graph LR
-    P1[Publisher 1] --> B[/tmp/zshmq/topic.fifo]
-    P2[Publisher 2] --> B
-    B --> D[Dispatcher]
-    D --> S1[Subscriber A topic: topic]
-    D --> S2[Subscriber B topic: topic]
+  P1["Publisher 1"] --> FIFO[/tmp/zshmq/topic.fifo/]
+  P2["Publisher 2"] --> FIFO
+  FIFO --> D{"Dispatcher"}
+  D --> S1["Subscriber A<br/>(topic: test)"]
+  D --> S2["Subscriber B<br/>(topic: test)"]
 ```
 
 - Publishers write messages into /tmp/zshmq/topic.fifo.

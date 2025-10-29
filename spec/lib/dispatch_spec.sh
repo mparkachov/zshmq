@@ -34,18 +34,18 @@ Describe 'dispatch'
   Context 'start'
     It 'launches the dispatcher and records its PID'
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
-      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
+      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test
       The status should be success
       The stderr should equal ''
-      The path "$ZSHMQ_CTX_ROOT/bus.pid" should be file
-      The file "$ZSHMQ_CTX_ROOT/bus.pid" should not be empty file
-      The contents of file "$ZSHMQ_CTX_ROOT/bus.pid" should match pattern '[0-9][0-9]*'
+      The path "$ZSHMQ_CTX_ROOT/test.pid" should be file
+      The file "$ZSHMQ_CTX_ROOT/test.pid" should not be empty file
+      The contents of file "$ZSHMQ_CTX_ROOT/test.pid" should match pattern '[0-9][0-9]*'
     End
 
     It 'requires --topic'
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
       When run dispatch start --path "$ZSHMQ_CTX_ROOT"
       The status should be failure
       The stderr should include '[ERROR] dispatch start: --topic is required'
@@ -53,58 +53,58 @@ Describe 'dispatch'
 
     It 'fails when the dispatcher is already running'
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
-      dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
-      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
+      dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1
+      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test
       The status should be failure
       The stderr should equal ''
     End
 
     It 'fails when the runtime directory is missing'
-      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus
+      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test
       The status should be failure
       The stderr should include '[ERROR] dispatch start: runtime directory not found'
     End
 
     It 'fails when topic assets are missing'
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus
+      When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test
       The status should be failure
       The stderr should include '[ERROR] dispatch start: topic FIFO not found'
     End
 
     It 'supports concurrent dispatchers for distinct topics'
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
       topic --path "$ZSHMQ_CTX_ROOT" new -T alerts >/dev/null 2>&1
 
-      dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
-      bus_pid=$(cat "$ZSHMQ_CTX_ROOT/bus.pid" 2>/dev/null || :)
-      kill -0 "$bus_pid"
+      dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1
+      test_pid=$(cat "$ZSHMQ_CTX_ROOT/test.pid" 2>/dev/null || :)
+      kill -0 "$test_pid"
 
       When run dispatch start --path "$ZSHMQ_CTX_ROOT" --topic alerts
       The status should be success
       The stderr should equal ''
 
       alerts_pid=$(cat "$ZSHMQ_CTX_ROOT/alerts.pid" 2>/dev/null || :)
-      The path "$ZSHMQ_CTX_ROOT/bus.pid" should be file
+      The path "$ZSHMQ_CTX_ROOT/test.pid" should be file
       The path "$ZSHMQ_CTX_ROOT/alerts.pid" should be file
-      The variable bus_pid should not equal "$alerts_pid"
-      kill -0 "$bus_pid"
+      The variable test_pid should not equal "$alerts_pid"
+      kill -0 "$test_pid"
       kill -0 "$alerts_pid"
     End
 
     dispatch_trace_log_helper() {
       export ZSHMQ_LOG_LEVEL=TRACE
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
       trace_log="$SHELLSPEC_TMPDIR/dispatch_trace.log"
       : > "$trace_log"
 
-      zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/bus.fifo" "${ZSHMQ_CTX_ROOT}/bus.state" 2>"$trace_log" &
+      zshmq_dispatch_loop "${ZSHMQ_CTX_ROOT}/test.fifo" "${ZSHMQ_CTX_ROOT}/test.state" 2>"$trace_log" &
       dispatcher_pid=$!
 
-      printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/bus.fifo"
+      printf '%s\n' 'PUB|ALERT|system overload' > "${ZSHMQ_CTX_ROOT}/test.fifo"
 
       attempts=0
       while [ "$attempts" -lt 50 ]; do
@@ -131,22 +131,22 @@ Describe 'dispatch'
   Context 'stop'
     dispatch_stop_before_each() {
       ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
-      topic --path "$ZSHMQ_CTX_ROOT" new -T bus >/dev/null 2>&1
-      dispatch start --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
+      dispatch start --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1
     }
 
     dispatch_stop_after_each() {
-      dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1 || :
+      dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1 || :
     }
 
     BeforeEach 'dispatch_stop_before_each'
     AfterEach 'dispatch_stop_after_each'
 
     It 'terminates the dispatcher for the requested topic'
-      When run dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic bus
+      When run dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic test
       The status should be success
       The stderr should equal ''
-      The path "$ZSHMQ_CTX_ROOT/bus.pid" should not exist
+      The path "$ZSHMQ_CTX_ROOT/test.pid" should not exist
     End
 
     It 'requires --topic when no environment override is set'
@@ -156,8 +156,8 @@ Describe 'dispatch'
     End
 
     It 'succeeds when the dispatcher is already stopped'
-      dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic bus >/dev/null 2>&1
-      When run dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic bus
+      dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1
+      When run dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic test
       The status should be success
       The stderr should equal ''
     End
