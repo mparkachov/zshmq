@@ -2,10 +2,10 @@
 # shellcheck shell=sh
 
 #/**
-# send - Publish a message to the zshmq dispatcher.
-# @usage: zshmq send --topic TOPIC [--path PATH] MESSAGE...
+# topic send - Publish a message to the zshmq dispatcher.
+# @usage: zshmq topic send --topic TOPIC [--path PATH] MESSAGE...
 # @summary: Publish a message through the dispatcher FIFO.
-# @description: Validate the existing runtime directory, ensure the dispatcher is running, and write the message to the topic-specific FIFO so subscribers receive it.
+# @description: Validate the runtime directory, ensure the dispatcher is running, and write the message to the topic-specific FIFO so subscribers receive it.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -T, --topic TOPIC  Topic name for the published message (required).
 # @option: -d, --debug        Enable DEBUG log level.
@@ -13,23 +13,23 @@
 # @option: -h, --help         Display command documentation and exit.
 #*/
 
-send_parser_definition() {
+topic_send_parser_definition() {
   zshmq_parser_defaults
   param CTX_PATH -p --path -- 'Runtime directory to target'
-  param SEND_TOPIC -T --topic -- 'Explicit topic to apply'
+  param TOPIC_SEND_TOPIC -T --topic -- 'Explicit topic to apply'
 }
 
-send_trim() {
-  # Trim leading and trailing whitespace.
+topic_send_trim() {
+  # Trim leading and trailing whitespace in a POSIX-safe way.
   printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
-send() {
+topic_send() {
   set -eu
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'send: ZSHMQ_ROOT is not set'
+      zshmq_log_error 'topic send: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -40,8 +40,10 @@ send() {
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
+  ZSHMQ_PARSER_USAGE='zshmq topic send --topic TOPIC [--path PATH] MESSAGE...'
+
   set +e
-  zshmq_eval_parser send send_parser_definition "$@"
+  zshmq_eval_parser topic_send topic_send_parser_definition "$@"
   status=$?
   set -e
 
@@ -57,14 +59,14 @@ send() {
       ;;
   esac
 
-  topic=${SEND_TOPIC:-}
+  topic=${TOPIC_SEND_TOPIC:-}
   if [ -z "$topic" ]; then
-    zshmq_log_error 'send: --topic is required'
+    zshmq_log_error 'topic send: --topic is required'
     return 1
   fi
 
   if [ $# -eq 0 ]; then
-    zshmq_log_error 'send: message is required'
+    zshmq_log_error 'topic send: message is required'
     return 1
   fi
 
@@ -74,17 +76,15 @@ send() {
     message="$message $*"
   fi
 
-  topic=$(send_trim "$topic")
+  topic=$(topic_send_trim "$topic")
   if [ -z "$topic" ]; then
-    zshmq_log_error 'send: topic must not be empty'
+    zshmq_log_error 'topic send: topic must not be empty'
     return 1
   fi
 
-  body=$message
-
   case $topic in
     *'|'*)
-      zshmq_log_error 'send: topic must not contain "|"'
+      zshmq_log_error 'topic send: topic must not contain "|"'
       return 1
       ;;
   esac
@@ -92,13 +92,13 @@ send() {
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    zshmq_log_error 'send: target path is empty'
+    zshmq_log_error 'topic send: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      zshmq_log_error 'send: refusing to operate on root directory'
+      zshmq_log_error 'topic send: refusing to operate on root directory'
       return 1
       ;;
   esac
@@ -108,12 +108,12 @@ send() {
   pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
 
   if [ ! -d "$target" ]; then
-    zshmq_log_error 'send: runtime directory not found: %s' "$target"
+    zshmq_log_error 'topic send: runtime directory not found: %s' "$target"
     return 1
   fi
 
   if [ ! -p "$topic_fifo_path" ]; then
-    zshmq_log_error 'send: topic FIFO not found at %s' "$topic_fifo_path"
+    zshmq_log_error 'topic send: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
@@ -124,14 +124,10 @@ send() {
   fi
 
   if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    zshmq_log_error 'send: dispatcher is not running'
+    zshmq_log_error 'topic send: dispatcher is not running'
     return 1
   fi
 
-  zshmq_log_trace 'send: topic=%s message=%s' "$topic" "$body"
-  printf 'PUB|%s|%s\n' "$topic" "$body" > "$topic_fifo_path"
+  zshmq_log_trace 'topic send: topic=%s message=%s' "$topic" "$message"
+  printf 'PUB|%s|%s\n' "$topic" "$message" > "$topic_fifo_path"
 }
-
-if command -v zshmq_register_command >/dev/null 2>&1; then
-  zshmq_register_command send
-fi

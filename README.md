@@ -13,7 +13,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
-- **ZeroMQ-like CLI:** Familiar commands (`dispatch`, `send`, `sub`, etc.).
+- **ZeroMQ-like CLI:** Familiar commands (`dispatch`, `topic send`, `topic sub`, etc.).
 - **Tiny:** A single portable shell script.
 
 ---
@@ -45,11 +45,11 @@ It's perfect for:
 
 ```mermaid
 graph LR
-    P1[Publisher 1] --> B[( /tmp/zshmq/topic.fifo )]
+    P1[Publisher 1] --> B[/tmp/zshmq/topic.fifo]
     P2[Publisher 2] --> B
     B --> D[Dispatcher]
-    D --> S1[Subscriber A (topic: topic)]
-    D --> S2[Subscriber B (topic: topic)]
+    D --> S1[Subscriber A topic: topic]
+    D --> S2[Subscriber B topic: topic]
 ```
 
 - Publishers write messages into /tmp/zshmq/topic.fifo.
@@ -140,7 +140,7 @@ Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current ter
 
 ### Step 4: Subscribe to a Topic
 ```bash
-zshmq sub --topic topic
+zshmq topic sub --topic topic
 ```
 Creates /tmp/zshmq/topic.<pid>. Enable `-d/--debug` if you need connection logs; messages for the topic stream to stdout:
 
@@ -150,8 +150,8 @@ The command runs until you interrupt it (Ctrl+C). On exit it deregisters from th
 
 ### Step 5: Publish Messages
 ```bash
-zshmq send --topic topic "system overload"
-zshmq send --topic topic "cooling active"
+zshmq topic send --topic topic "system overload"
+zshmq topic send --topic topic "cooling active"
 ```
 Messages are routed to every subscriber registered on the `topic` topic. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
 
@@ -190,8 +190,8 @@ zshmq ctx destroy [--force]	Remove the runtime directory (default: /tmp/zshmq); 
 zshmq topic new -T <topic>	Create the FIFO and state file for the topic inside the runtime directory
 zshmq topic destroy -T <topic>	Remove the FIFO and state file for the topic
 zshmq dispatch start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
-zshmq send --topic <topic> <message>	Publish a message for the topic
-zshmq sub --topic <topic>	Subscribe to messages on the topic
+zshmq topic send --topic <topic> <message>	Publish a message for the topic
+zshmq topic sub --topic <topic>	Subscribe to messages on the topic
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber
 zshmq dispatch stop --topic <topic>	Stop the dispatcher for a topic
@@ -221,13 +221,13 @@ zshmq dispatch start --topic topic
 
 Terminal 3 - Subscriber
 ```bash
-zshmq sub --topic topic
+zshmq topic sub --topic topic
 ```
 
 Terminal 4 - Publisher
 ```bash
-zshmq send --topic topic "Disk full"
-zshmq send --topic topic "Backup started"
+zshmq topic send --topic topic "Disk full"
+zshmq topic send --topic topic "Backup started"
 ```
 
 Subscriber Output

@@ -18,6 +18,8 @@ topic_print_usage() {
   printf '%s\n' 'Commands:'
   printf '  new      Initialise topic assets (-T/--topic required)\n'
   printf '  destroy  Remove topic assets    (-T/--topic required)\n'
+  printf '  send     Publish a message      (-T/--topic required)\n'
+  printf '  sub      Stream topic messages  (-T/--topic required)\n'
 }
 
 topic_require_topic() {
@@ -188,6 +190,7 @@ topic() {
 
   log_level=${ZSHMQ_LOG_LEVEL:-INFO}
   target_path=${ZSHMQ_CTX_ROOT:-/tmp/zshmq}
+  target_overridden=0
 
   export ZSHMQ_LOG_LEVEL=$log_level
 
@@ -200,9 +203,11 @@ topic() {
           return 1
         fi
         target_path=$1
+        target_overridden=1
         ;;
       -p=*|--path=*)
         target_path=${1#*=}
+        target_overridden=1
         ;;
       -d|--debug)
         log_level=DEBUG
@@ -239,16 +244,30 @@ topic() {
   subcommand=$1
   shift
 
-  runtime_root=$(topic_ensure_runtime "$target_path") || return 1
-
   case $subcommand in
     new)
+      runtime_root=$(topic_ensure_runtime "$target_path") || return 1
       topic_name=$(topic_require_topic "$subcommand" "$@") || return 1
       topic_new "$runtime_root" "$topic_name"
       ;;
     destroy)
+      runtime_root=$(topic_ensure_runtime "$target_path") || return 1
       topic_name=$(topic_require_topic "$subcommand" "$@") || return 1
       topic_destroy "$runtime_root" "$topic_name"
+      ;;
+    send)
+      if [ "$target_overridden" -eq 1 ]; then
+        CTX_PATH=$target_path topic_send "$@"
+      else
+        topic_send "$@"
+      fi
+      ;;
+    sub)
+      if [ "$target_overridden" -eq 1 ]; then
+        CTX_PATH=$target_path topic_sub "$@"
+      else
+        topic_sub "$@"
+      fi
       ;;
     -h|--help|help)
       topic_print_usage

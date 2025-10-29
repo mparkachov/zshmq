@@ -6,7 +6,6 @@ Describe 'zshmq --help'
     The stdout should include 'ctx - Manage the runtime directory (default: /tmp/zshmq).'
     The stdout should include 'topic - Manage topic FIFOs and state files.'
     The stdout should include 'dispatch - Start or stop the dispatcher that routes messages for a topic.'
-    The stdout should include 'send - Publish a message through the dispatcher FIFO.'
     The stdout should include 'Each command supports -h/--help plus -d/--debug and -t/--trace for log verbosity.'
     The stdout should not include 'Command: ctx'
     The stdout should not include 'Command: topic'
@@ -32,6 +31,8 @@ Describe 'zshmq topic --help'
     The stdout should include 'Usage: zshmq topic <command>'
     The stdout should include 'new      Initialise topic assets (-T/--topic required)'
     The stdout should include 'destroy  Remove topic assets    (-T/--topic required)'
+    The stdout should include 'send     Publish a message      (-T/--topic required)'
+    The stdout should include 'sub      Stream topic messages  (-T/--topic required)'
   End
 End
 
@@ -63,11 +64,20 @@ Describe 'zshmq dispatch stop --help'
   End
 End
 
-Describe 'zshmq send --help'
+Describe 'zshmq topic send --help'
   It 'shows command-specific documentation'
-    When run ./bin/zshmq.sh send --help
+    When run ./bin/zshmq.sh topic send --help
     The status should be success
-    The stdout should include 'Command: send'
+    The stdout should include 'Command: topic send'
+    The stdout should include 'Options:'
+  End
+End
+
+Describe 'zshmq topic sub --help'
+  It 'shows command-specific documentation'
+    When run ./bin/zshmq.sh topic sub --help
+    The status should be success
+    The stdout should include 'Command: topic sub'
     The stdout should include 'Options:'
   End
 End
