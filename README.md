@@ -1,5 +1,9 @@
 # Zero Shell Message Queue (zshmq)
 
+[![Release](https://img.shields.io/github/v/release/mparkachov/zshmq)](https://github.com/mparkachov/zshmq/releases/latest)
+[![Build Status](https://github.com/mparkachov/zshmq/actions/workflows/test.yml/badge.svg)](https://github.com/mparkachov/zshmq/actions/workflows/test.yml)
+[![License](https://img.shields.io/github/license/mparkachov/zshmq)](LICENSE)
+
 **Zero Shell Message Queue (zshmq)** is a lightweight, [ZeroMQ](https://zeromq.org/)-inspired **message topic for POSIX shells**.
 It provides a simple **publish/subscribe** mechanism using only **FIFOs (named pipes)** - no sockets, daemons, or dependencies.
 
