@@ -56,7 +56,7 @@ release: bootstrap $(ZSHMQ_BIN)
 	if git rev-parse "v$$version" >/dev/null 2>&1; then \
 		printf 'Tag v%s already exists; skipping tag creation.\n' "$$version" >&2; \
 	else \
-		echo git tag "v$$version"; \
+		git tag "v$$version"; \
 		printf 'Created tag v%s\n' "$$version" >&2; \
 	fi
 

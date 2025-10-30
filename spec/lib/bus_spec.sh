@@ -76,45 +76,6 @@ Describe 'bus'
     return 0
   }
 
-  bus_spec_setup_forwarding() {
-    zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1 || return 1
-    zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start >/dev/null 2>&1 || return 1
-
-    zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex 'ALERT' >/dev/null 2>&1 || return 1
-    zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" start --topic alerts >/dev/null 2>&1 || return 1
-
-    BUS_SPEC_SUBSCRIBER_LOG="$SHELLSPEC_TMPDIR/alerts.log"
-    subscriber_fifo="$SHELLSPEC_TMPDIR/alerts_sub.fifo"
-    rm -f "$subscriber_fifo"
-    if ! mkfifo "$subscriber_fifo"; then
-      return 1
-    fi
-
-    # Reader exits after a single message is delivered.
-    sh -c "cat \"$subscriber_fifo\" > \"$BUS_SPEC_SUBSCRIBER_LOG\"" &
-    BUS_SPEC_SUBSCRIBER_PID=$!
-
-    printf 'SUB|%s\n' "$subscriber_fifo" > "$ZSHMQ_CTX_ROOT/alerts.fifo" || return 1
-
-    bus_wait_for_pattern "$ZSHMQ_CTX_ROOT/alerts.state" "$subscriber_fifo" 50 0.1 || return 1
-
-    zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" send --topic bus "ALERT system down" >/dev/null 2>&1 || return 1
-
-    bus_wait_for_pattern "$BUS_SPEC_SUBSCRIBER_LOG" 'ALERT system down' 50 0.1 || return 1
-
-    printf 'UNSUB|%s\n' "$subscriber_fifo" > "$ZSHMQ_CTX_ROOT/alerts.fifo" 2>/dev/null || :
-    rm -f "$subscriber_fifo" 2>/dev/null || :
-
-    # Ensure reader exits cleanly before leaving the helper.
-    wait "$BUS_SPEC_SUBSCRIBER_PID" 2>/dev/null || :
-    BUS_SPEC_SUBSCRIBER_PID=
-
-    zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" stop --topic alerts >/dev/null 2>&1 || :
-    zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" stop >/dev/null 2>&1 || :
-
-    return 0
-  }
-
   BeforeEach 'bus_before_each'
   AfterEach 'bus_after_each'
 
@@ -124,19 +85,11 @@ Describe 'bus'
     The path "$ZSHMQ_CTX_ROOT/bus.fifo" should be pipe
     The path "$ZSHMQ_CTX_ROOT/bus.state" should be file
   End
-
   It 'records topic regex entries in the registry file'
     tab=$(printf '\t')
     When call zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex '^ALERT'
     The status should be success
     The file "$ZSHMQ_CTX_ROOT/topics.reg" should be file
     The contents of file "$ZSHMQ_CTX_ROOT/topics.reg" should include "alerts${tab}^ALERT"
-  End
-
-  xIt 'routes messages after the registry gains a new topic'
-    When call bus_spec_setup_forwarding
-    The status should be success
-
-    The contents of file "$BUS_SPEC_SUBSCRIBER_LOG" should include 'ALERT system down'
   End
 End

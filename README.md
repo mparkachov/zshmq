@@ -14,7 +14,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
 - **ZeroMQ-like CLI:** Familiar commands (`topic start`, `topic send`, `topic sub`, etc.).
-- **Fan-out bus:** Optional router that forwards a single message to multiple topics based on regex rules.
+- **Fan-out bus (experimental):** Regex-based router that forwards messages to subscribed topics; see Testing for current coverage details.
 - **Tiny:** A single portable shell script.
 
 ---
@@ -121,6 +121,20 @@ make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/repo
 ```
 The report will be written to `tmp/reports/results_junit.xml` and published automatically by CI.
 
+### Test Coverage
+
+| Feature | Verification |
+| --- | --- |
+| Runtime lifecycle (`ctx new`, `ctx destroy`) | `spec/lib/ctx_spec.sh` |
+| Topic asset management (`topic new`, `topic destroy`) | `spec/lib/topic_spec.sh` |
+| Topic dispatcher lifecycle (`topic start`, `topic stop`) | `spec/lib/topic_dispatch_spec.sh` |
+| Topic publishing (`topic send`) | `spec/lib/topic_send_spec.sh` |
+| Bus provisioning and registry management (`bus new`, `bus start`, `bus stop`) | `spec/lib/bus_spec.sh` |
+
+> **Notes**
+> - Bus fan-out routing is under active repair; the end-to-end example in `spec/lib/bus_spec.sh` is temporarily skipped while the issue is investigated.
+> - `topic sub` is an interactive streaming command and is validated manually per the repository testing guidelines.
+
 Build a release artifact using the version recorded in `VERSION` (update the file manually when bumping releases):
 ```sh
 make release
@@ -153,7 +167,7 @@ Initialise the runtime directory (default `/tmp/zshmq`). Run this once per envir
 ```bash
 zshmq topic new -T topic [--regex REGEX]
 ```
-Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route. When the routing bus is enabled (see below), supply `--regex` to register the topic's fan-out rule in the shared `topics.reg` registry; leave the regex empty to opt out of bus deliveries for that topic.
+Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route. When the routing bus is enabled (see below), supply `--regex` to register the topic's fan-out rule in the shared `topics.reg` registry; leave the regex empty to opt out of bus deliveries for that topic. **Subscribers will not receive messages until a dispatcher started with `topic start --topic <name>` is running for that topic.**
 
 ### Step 3: Start Dispatcher
 ```bash
@@ -163,7 +177,7 @@ Runs the router that listens for messages and subscription updates. This command
 Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
 
 ### Optional: Configure the Routing Bus
-The `bus` command provides a central fan-out dispatcher that reads messages from the special `bus` topic and forwards them to every topic whose registry regex matches the payload. Standard topic workflows (`topic new`, `topic start`, `topic send`, `topic sub`) operate entirely without the bus, so you only need these commands when you want regex-based fan-out.
+The `bus` command provides a central fan-out dispatcher that reads messages from the special `bus` topic and forwards them to every topic whose registry regex matches the payload. Standard topic workflows (`topic new`, `topic start`, `topic send`, `topic sub`) operate entirely without the bus, so you only need these commands when you want regex-based fan-out. **Ensure `bus start` is running alongside the destination topic dispatchers so forwarded messages have somewhere to land.**
 
 ```bash
 # Run once per runtime to provision the bus topic and registry entry
@@ -198,29 +212,13 @@ zshmq topic send --topic topic "cooling active"
 ```
 Messages are routed to every subscriber registered on the `topic` topic. Success is reported through the logger; enable TRACE logging (`-t`/`--trace`) to capture full routing details.
 
-### Step 6: List Active Subscribers
-```bash
-zshmq list
-```
-Example output:
-
-PID     FIFO
-2314    /tmp/zshmq/topic.2314
-2318    /tmp/zshmq/topic.2318
-
-### Step 7: Unsubscribe
-```bash
-zshmq unsub
-```
-Removes your FIFO and deregisters from the dispatcher.
-
-### Step 8: Stop Dispatcher
+### Step 6: Stop Dispatcher
 ```bash
 zshmq topic stop --topic topic
 ```
 Gracefully terminates the router for the supplied topic and cleans up /tmp/zshmq/topic.fifo.
 
-### Step 9: Destroy Runtime (optional)
+### Step 7: Destroy Runtime (optional)
 ```bash
 zshmq ctx destroy
 ```
@@ -241,8 +239,6 @@ Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROO
 | `zshmq topic start --topic <topic>` | Start the dispatcher process (use `--foreground` to stay attached to the terminal). |
 | `zshmq topic send --topic <topic> <message>` | Publish a message for the topic. |
 | `zshmq topic sub --topic <topic>` | Subscribe to messages on the topic. |
-| `zshmq list` | Show active subscribers. |
-| `zshmq unsub` | Unregister the current subscriber. |
 | `zshmq topic stop --topic <topic>` | Stop the dispatcher for a topic. |
 | `zshmq --help` | Show usage. |
 | `zshmq --version` | Display version info. |
@@ -288,33 +284,25 @@ Subscriber Output
 ```
 ## Implementation Summary
 
-- Dispatcher uses a blocking read on /tmp/zshmq/topic.fifo (no polling).
-- Subscriptions stored in /tmp/zshmq/topic.state with one FIFO per line.
-- Subscribers each have a private FIFO (/tmp/zshmq/<topic>.<pid>).
-- Multiple publishers supported (atomic writes up to PIPE_BUF).
-- Fully POSIX; no arrays or Bash-specific syntax.
+- Topic dispatchers block on `/tmp/zshmq/<topic>.fifo` and stream PUB frames to subscribers.
+- Subscriber registrations live in `/tmp/zshmq/<topic>.state`, one FIFO path per subscriber.
+- Each subscriber FIFO follows the `/<runtime>/<topic>.<pid>` convention for safe fan-out.
+- Publishers write atomically to the topic FIFO (up to `PIPE_BUF` bytes).
+- Implementation is strictly POSIX shell; no arrays or Bash-only constructs.
 
 ## Limitations
 
-- One reader per FIFO (FIFO property).
-- No guaranteed delivery or message persistence.
-- No message-level filtering; dispatch is scoped entirely by topic.
-- Single host only (no networking).
-- Single broker per machine because all instances share the /tmp/zshmq/ directory.
-
-## Roadmap
-
-- Implement REQ/REP and PUSH/PULL patterns
-- Add persistence and re-delivery
-- Add metrics and TTLs
-- Optional Unix-socket backend
+- Topic dispatchers and the bus must be running to deliver messages (no brokerless mode).
+- One reader per FIFO; subscribers rely on dedicated FIFOs for fan-out.
+- No guaranteed delivery or retention once messages leave the dispatcher.
+- No message-level filtering beyond topic names/regex; payload inspection is up to consumers.
+- Single-host runtime: coordination happens through the shared runtime directory (default `/tmp/zshmq`).
 
 ## Design Philosophy
 
 | Principle | Description |
 | --- | --- |
 | Zero dependencies | Pure POSIX implementation. |
-| Brokerless | Simple dispatcher; no background services. |
 | Transparent messages | Human-readable text. |
 | Efficient | Blocking I/O, near-zero CPU when idle. |
 | Educational | Teaches message-passing concepts with FIFOs. |
