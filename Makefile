@@ -73,11 +73,11 @@ release-publish:
 		: ; \
 	else \
 		git add "$(VERSION_FILE)"; \
-		git commit -m "chore: release $(VERSION)"; \
+		git commit -m "Release $(VERSION)"; \
 	fi; \
 	$(MAKE) release >/dev/null; \
 	git add "$(RELEASE_ARTIFACT)"; \
-	git commit --amend --no-edit >/dev/null 2>&1 || git commit -m "chore: release $(VERSION)"; \
+	git commit --amend --no-edit >/dev/null 2>&1 || git commit -m "Release $(VERSION)"; \
 	git add "$(RELEASE_ARTIFACT)" "$(VERSION_FILE)"; \
 	g_version=$$(tr -d '\r\n' < "$(VERSION_FILE)"); \
 	git tag -f "v$$g_version"; \

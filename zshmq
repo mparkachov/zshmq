@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 ZSHMQ_EMBEDDED=1
-ZSHMQ_VERSION=0.1.1
+ZSHMQ_VERSION=0.1.2
 
 # shellcheck shell=sh disable=SC2016,SC2317
 # [getoptions] License: Creative Commons Zero v1.0 Universal
