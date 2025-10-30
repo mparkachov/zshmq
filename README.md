@@ -14,6 +14,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
 - **ZeroMQ-like CLI:** Familiar commands (`dispatch`, `topic send`, `topic sub`, etc.).
+- **Fan-out bus:** Optional router that forwards a single message to multiple topics based on regex rules.
 - **Tiny:** A single portable shell script.
 
 ---
@@ -127,9 +128,9 @@ Initialise the runtime directory (default `/tmp/zshmq`). Run this once per envir
 
 ### Step 2: Create Topic Assets
 ```bash
-zshmq topic new -T topic
+zshmq topic new -T topic [--regex REGEX]
 ```
-Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route.
+Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route. When the routing bus is enabled (see below), supply `--regex` to register the topic's fan-out rule in the shared `topics` registry; leave the regex empty to opt out of bus deliveries for that topic.
 
 ### Step 3: Start Dispatcher
 ```bash
@@ -137,6 +138,25 @@ zshmq dispatch start --topic topic
 ```
 Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx new` to have prepared the runtime directory first and will exit with an error if the context is missing. Supply `--topic` to decide which FIFO/topic name the dispatcher should service.
 Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
+
+### Optional: Configure the Routing Bus
+The `bus` command provides a central fan-out dispatcher that reads messages from the special `bus` topic and forwards them to every topic whose registry regex matches the payload.
+
+```bash
+# Run once per runtime to provision the bus topic and registry entry
+zshmq bus new
+
+# Launch the bus dispatcher (runs in the background by default)
+zshmq bus start
+
+# Register a topic and its matching rule
+zshmq topic new -T alerts --regex 'ALERT'
+zshmq dispatch start --topic alerts
+
+# Publish via the bus; any matching topics receive the message concurrently
+zshmq topic send --topic bus "ALERT system down"
+```
+Update a topic's regex by re-running `zshmq topic new -T <topic> --regex '<pattern>'`. Destroying a topic (or running `zshmq bus destroy`) removes its registry entry automatically. Restarting is optional: the bus reloads `topics` on every message so changes apply immediately.
 
 ### Step 4: Subscribe to a Topic
 ```bash
@@ -187,8 +207,12 @@ Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROO
 Command	Description
 zshmq ctx new [--path PATH]	Create or reset the runtime directory (default: /tmp/zshmq)
 zshmq ctx destroy [--force]	Remove the runtime directory (default: /tmp/zshmq); use --force to delete non-empty directories
-zshmq topic new -T <topic>	Create the FIFO and state file for the topic inside the runtime directory
-zshmq topic destroy -T <topic>	Remove the FIFO and state file for the topic
+zshmq bus new [--path PATH]	Provision the special bus topic and ensure it is present in the topics registry
+zshmq bus start [--path PATH]	Start the bus dispatcher (use --foreground to stay attached to the terminal)
+zshmq bus stop [--path PATH]	Stop the bus dispatcher
+zshmq bus destroy [--path PATH]	Remove the bus topic and its registry entry
+zshmq topic new -T <topic> [--regex REGEX]	Create/update the FIFO/state pair and register the topic's bus regex (omit or empty regex to disable forwarding)
+zshmq topic destroy -T <topic> [--regex REGEX]	Remove the FIFO/state pair and drop the registry entry
 zshmq dispatch start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
 zshmq topic send --topic <topic> <message>	Publish a message for the topic
 zshmq topic sub --topic <topic>	Subscribe to messages on the topic

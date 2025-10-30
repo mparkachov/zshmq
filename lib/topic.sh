@@ -7,6 +7,7 @@
 # @summary: Manage topic FIFOs and state files.
 # @description: Provides subcommands to provision or remove the FIFO/state pair used by publishers and subscribers for a topic.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: --regex REGEX      (topic new/destroy) Optional routing regex recorded in the topics registry.
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
@@ -22,11 +23,118 @@ topic_print_usage() {
   printf '  sub      Stream topic messages  (-T/--topic required)\n'
 }
 
+topic_registry_path() {
+  runtime_root=$1
+  printf '%s\n' "${runtime_root}/topics"
+}
+
+topic_registry_normalize_regex() {
+  printf '%s' "$1" | tr -d '\r'
+}
+
+topic_registry_upsert() {
+  runtime_root=$1
+  topic_name=$2
+  topic_regex=$3
+
+  registry_path=$(topic_registry_path "$runtime_root")
+  tmp_registry="${registry_path}.tmp.$$"
+  registry_dir=${registry_path%/*}
+  if [ ! -d "$registry_dir" ]; then
+    mkdir -p "$registry_dir"
+  fi
+  touch "$registry_path"
+
+  found=0
+  : > "$tmp_registry"
+
+  while IFS= read -r registry_line || [ -n "$registry_line" ]; do
+    # Preserve lines unrelated to topics (e.g. comments).
+    case $registry_line in
+      '')
+        printf '\n' >> "$tmp_registry"
+        continue
+        ;;
+      \#*)
+        printf '%s\n' "$registry_line" >> "$tmp_registry"
+        continue
+        ;;
+    esac
+    entry_topic=$registry_line
+    entry_regex=
+    case $registry_line in
+      *'	'*)
+        entry_topic=${registry_line%%	*}
+        entry_regex=${registry_line#*	}
+        ;;
+    esac
+    if [ "$entry_topic" = "$topic_name" ]; then
+      found=1
+      normalized_regex=$(topic_registry_normalize_regex "$topic_regex")
+      printf '%s\t%s\n' "$topic_name" "$normalized_regex" >> "$tmp_registry"
+    else
+      printf '%s\n' "$registry_line" >> "$tmp_registry"
+    fi
+  done < "$registry_path"
+
+  if [ "$found" -eq 0 ]; then
+    normalized_regex=$(topic_registry_normalize_regex "$topic_regex")
+    printf '%s\t%s\n' "$topic_name" "$normalized_regex" >> "$tmp_registry"
+  fi
+
+  mv "$tmp_registry" "$registry_path"
+}
+
+topic_registry_remove() {
+  runtime_root=$1
+  topic_name=$2
+
+  registry_path=$(topic_registry_path "$runtime_root")
+  if [ ! -f "$registry_path" ]; then
+    return 0
+  fi
+
+  tmp_registry="${registry_path}.tmp.$$"
+  removed=0
+  : > "$tmp_registry"
+
+  while IFS= read -r registry_line || [ -n "$registry_line" ]; do
+    case $registry_line in
+      '')
+        printf '\n' >> "$tmp_registry"
+        continue
+        ;;
+      \#*)
+        printf '%s\n' "$registry_line" >> "$tmp_registry"
+        continue
+        ;;
+    esac
+    entry_topic=$registry_line
+    case $registry_line in
+      *'	'*)
+        entry_topic=${registry_line%%	*}
+        ;;
+    esac
+    if [ "$entry_topic" = "$topic_name" ]; then
+      removed=1
+      continue
+    fi
+    printf '%s\n' "$registry_line" >> "$tmp_registry"
+  done < "$registry_path"
+
+  mv "$tmp_registry" "$registry_path"
+  if [ "$removed" -eq 1 ]; then
+    return 0
+  fi
+  return 1
+}
+
 topic_require_topic() {
   subcommand=$1
   shift
 
   topic_name=
+  topic_regex=
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -40,6 +148,17 @@ topic_require_topic() {
         ;;
       -T=*|--topic=*)
         topic_name=${1#*=}
+        ;;
+      --regex)
+        shift
+        if [ $# -eq 0 ]; then
+          zshmq_log_error 'topic %s: --regex requires a value' "$subcommand"
+          return 1
+        fi
+        topic_regex=$1
+        ;;
+      --regex=*)
+        topic_regex=${1#*=}
         ;;
       --)
         shift
@@ -72,6 +191,10 @@ topic_require_topic() {
       zshmq_log_error 'topic %s: topic must not contain "|"' "$subcommand"
       return 1
       ;;
+    *'	'*)
+      zshmq_log_error 'topic %s: topic must not contain tabs' "$subcommand"
+      return 1
+      ;;
     *'/'*)
       zshmq_log_error 'topic %s: topic must not contain "/"' "$subcommand"
       return 1
@@ -83,7 +206,8 @@ topic_require_topic() {
       ;;
   esac
 
-  printf '%s\n' "$topic_name"
+  TOPIC_NAME=$topic_name
+  TOPIC_REGEX=$topic_regex
 }
 
 topic_ensure_runtime() {
@@ -112,6 +236,7 @@ topic_ensure_runtime() {
 topic_new() {
   runtime_root=$1
   topic_name=$2
+  topic_regex=${3-}
 
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic_name}.state}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic_name}.fifo}
@@ -160,12 +285,15 @@ topic_new() {
     return 1
   fi
 
+  topic_registry_upsert "$runtime_root" "$topic_name" "$topic_regex"
+
   zshmq_log_debug 'topic new: initialised topic=%s runtime=%s' "$topic_name" "$runtime_root"
 }
 
 topic_destroy() {
   runtime_root=$1
   topic_name=$2
+  topic_regex=${3-}
 
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic_name}.state}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic_name}.fifo}
@@ -182,6 +310,12 @@ topic_destroy() {
     zshmq_log_debug 'topic destroy: removed fifo=%s' "$topic_fifo_path"
   else
     zshmq_log_trace 'topic destroy: fifo missing (%s)' "$topic_fifo_path"
+  fi
+
+  if topic_registry_remove "$runtime_root" "$topic_name"; then
+    zshmq_log_debug 'topic destroy: removed registry entry topic=%s' "$topic_name"
+  else
+    zshmq_log_trace 'topic destroy: registry entry missing topic=%s' "$topic_name"
   fi
 }
 
@@ -247,13 +381,21 @@ topic() {
   case $subcommand in
     new)
       runtime_root=$(topic_ensure_runtime "$target_path") || return 1
-      topic_name=$(topic_require_topic "$subcommand" "$@") || return 1
-      topic_new "$runtime_root" "$topic_name"
+      unset TOPIC_REGEX || :
+      unset TOPIC_NAME || :
+      topic_require_topic "$subcommand" "$@" || return 1
+      topic_name=${TOPIC_NAME-}
+      topic_regex=${TOPIC_REGEX-}
+      topic_new "$runtime_root" "$topic_name" "$topic_regex"
       ;;
     destroy)
       runtime_root=$(topic_ensure_runtime "$target_path") || return 1
-      topic_name=$(topic_require_topic "$subcommand" "$@") || return 1
-      topic_destroy "$runtime_root" "$topic_name"
+      unset TOPIC_REGEX || :
+      unset TOPIC_NAME || :
+      topic_require_topic "$subcommand" "$@" || return 1
+      topic_name=${TOPIC_NAME-}
+      topic_regex=${TOPIC_REGEX-}
+      topic_destroy "$runtime_root" "$topic_name" "$topic_regex"
       ;;
     send)
       if [ "$target_overridden" -eq 1 ]; then

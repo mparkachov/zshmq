@@ -12,7 +12,7 @@ Expose every build, package, and test workflow through POSIX-compliant `make` ta
 
 Provide `make bootstrap` to initialise submodules and the local `tmp/` workspace before running other targets.
 
-Use `zshmq topic new -T <topic>` to create the FIFO/state assets for a topic; `ctx new` only prepares the runtime directory. Remove them via `zshmq topic destroy -T <topic>` when needed.
+Use `zshmq topic new -T <topic> [--regex REGEX]` to create the FIFO/state assets for a topic and persist its routing regex; `ctx new` only prepares the runtime directory. Remove them via `zshmq topic destroy -T <topic>` when needed. Provision fan-out support with `zshmq bus new` / `zshmq bus start` so messages on the `bus` topic are forwarded according to the registry rules.
 
 ## Coding Style & Naming Conventions
 Author POSIX-compliant shell (`#!/usr/bin/env sh`). Prefer two-space indentation, guard against unbound variables (`set -eu`), and use `printf` over `echo` when formatting output. Keep documentation and code ASCII-only - avoid emojis or iconography. Name files and functions with snake_case (`dispatcher_loop`, `lib/subscriber.sh`) and mirror relevant ZeroMQ function names when behaviors align to ease cross-referencing. Keep functions pure where possible; side-effect helpers should end with `_cmd` to signal command usage. Document non-obvious logic with short inline comments.
