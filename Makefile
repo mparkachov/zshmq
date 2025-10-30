@@ -58,7 +58,32 @@ release: bootstrap $(ZSHMQ_BIN)
 	else \
 		git tag "v$$version"; \
 		printf 'Created tag v%s\n' "$$version" >&2; \
-	fi
+	fi; \
+	printf 'Release artifact is available at %s\n' "$(RELEASE_ARTIFACT)" >&2
+
+.PHONY: release-publish
+release-publish:
+	@if [ -z "$(VERSION)" ]; then \
+		printf '%s\n' 'Usage: VERSION=<semver> make release-publish' >&2; \
+		exit 1; \
+	fi; \
+	printf '%s\n' "$(VERSION)" > "$(VERSION_FILE)"; \
+	printf 'Updated %s to %s\n' "$(VERSION_FILE)" "$(VERSION)" >&2; \
+	if git diff --quiet -- "$(VERSION_FILE)"; then \
+		: ; \
+	else \
+		git add "$(VERSION_FILE)"; \
+		git commit -m "chore: release $(VERSION)"; \
+	fi; \
+	$(MAKE) release >/dev/null; \
+	git add "$(RELEASE_ARTIFACT)"; \
+	git commit --amend --no-edit >/dev/null 2>&1 || git commit -m "chore: release $(VERSION)"; \
+	git add "$(RELEASE_ARTIFACT)" "$(VERSION_FILE)"; \
+	g_version=$$(tr -d '\r\n' < "$(VERSION_FILE)"); \
+	git tag -f "v$$g_version"; \
+	git push origin HEAD; \
+	git push origin --tags; \
+	gh release create "v$$g_version" "$(RELEASE_ARTIFACT)" --title "v$$g_version" --notes "Release $$g_version" --latest >/dev/null
 
 $(SHELLSPEC):
 	@printf '%s\n' 'ShellSpec submodule missing. Run git submodule update --init --recursive.' >&2

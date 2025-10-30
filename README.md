@@ -149,6 +149,9 @@ This creates a self-contained `zshmq` that embeds all library code without modif
 - `make bootstrap`
 - `make test`
 - `make release`
+- `VERSION=1.2.3 make release-publish`
+
+`release-publish` expects the GitHub CLI (`gh`) to be authenticated. It updates `VERSION`, rebuilds the bundled `zshmq` script, force-tags `v<version>`, pushes to `origin`, and creates a GitHub release that attaches the generated script.
 
 ## Usage
 List available commands (each supports `-h/--help` plus `-d/--debug` and `-t/--trace` for logging control):
