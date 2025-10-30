@@ -1677,7 +1677,7 @@ topic_print_usage() {
 
 topic_registry_path() {
   runtime_root=$1
-  printf '%s\n' "${runtime_root}/topics"
+  printf '%s\n' "${runtime_root}/topics.reg"
 }
 
 topic_registry_normalize_regex() {

@@ -16,7 +16,7 @@ Describe 'topic'
   topic_spec_register_regex() {
     ./bin/zshmq.sh topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex '^ALERT' >/dev/null 2>&1 || return 1
     tab=$(printf '\t')
-    grep -F "alerts${tab}^ALERT" "$ZSHMQ_CTX_ROOT/topics" >/dev/null 2>&1
+    grep -F "alerts${tab}^ALERT" "$ZSHMQ_CTX_ROOT/topics.reg" >/dev/null 2>&1
   }
 
   topic_spec_destroy_updates_registry() {
@@ -24,10 +24,10 @@ Describe 'topic'
     ./bin/zshmq.sh topic --path "$ZSHMQ_CTX_ROOT" new -T updates --regex '' >/dev/null 2>&1 || return 1
     ./bin/zshmq.sh topic --path "$ZSHMQ_CTX_ROOT" destroy -T alerts >/dev/null 2>&1 || return 1
     tab=$(printf '\t')
-    if grep -F "alerts${tab}^ALERT" "$ZSHMQ_CTX_ROOT/topics" >/dev/null 2>&1; then
+    if grep -F "alerts${tab}^ALERT" "$ZSHMQ_CTX_ROOT/topics.reg" >/dev/null 2>&1; then
       return 1
     fi
-    grep -F "updates${tab}" "$ZSHMQ_CTX_ROOT/topics" >/dev/null 2>&1
+    grep -F "updates${tab}" "$ZSHMQ_CTX_ROOT/topics.reg" >/dev/null 2>&1
   }
 
   It 'creates the fifo and state for a topic'
@@ -62,7 +62,7 @@ Describe 'topic'
   It 'records the topic regex in the registry'
     When call topic_spec_register_regex
     The status should be success
-    The file "$ZSHMQ_CTX_ROOT/topics" should be file
+    The file "$ZSHMQ_CTX_ROOT/topics.reg" should be file
   End
 
   It 'removes the registry entry on destroy'

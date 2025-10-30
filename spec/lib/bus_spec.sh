@@ -70,7 +70,7 @@ Describe 'bus'
   bus_spec_verify_registry() {
     zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1 || return 1
     tab=$(printf '\t')
-    if ! grep -F "bus${tab}" "$ZSHMQ_CTX_ROOT/topics" >/dev/null 2>&1; then
+    if ! grep -F "bus${tab}" "$ZSHMQ_CTX_ROOT/topics.reg" >/dev/null 2>&1; then
       return 1
     fi
     return 0
@@ -129,8 +129,8 @@ Describe 'bus'
     tab=$(printf '\t')
     When call zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex '^ALERT'
     The status should be success
-    The file "$ZSHMQ_CTX_ROOT/topics" should be file
-    The contents of file "$ZSHMQ_CTX_ROOT/topics" should include "alerts${tab}^ALERT"
+    The file "$ZSHMQ_CTX_ROOT/topics.reg" should be file
+    The contents of file "$ZSHMQ_CTX_ROOT/topics.reg" should include "alerts${tab}^ALERT"
   End
 
   xIt 'routes messages after the registry gains a new topic'

@@ -65,7 +65,7 @@ flowchart LR
 flowchart TD
   pub["Publisher<br/>topic send --topic bus"] --> bus_fifo{{"bus.fifo"}}
   bus_fifo --> bus_loop["zshmq_bus_loop<br/>(bus dispatcher)"]
-  bus_loop --> registry["topics registry<br/>(tab-separated: topic\\tregex)"]
+  bus_loop --> registry["topics.reg<br/>(tab-separated: topic\\tregex)"]
   registry -- matches --> match{"grep -E<br/>regex match?"}
   match -- yes --> alerts_fifo[/alerts.fifo/]
   alerts_fifo --> alerts_dispatcher["topic start --topic alerts"]
@@ -74,8 +74,8 @@ flowchart TD
   match -- no --> drop["trace: no route"]
 ```
 
-- `bus new` provisions the special `bus` topic and ensures the `topics` registry exists with a `bus` placeholder entry.
-- `topic new -T <topic> --regex '<pattern>'` appends or replaces that topic's regex in `topics` using tab-separated rows (`topic<TAB>regex`).
+- `bus new` provisions the special `bus` topic and ensures the `topics.reg` registry exists with a `bus` placeholder entry.
+- `topic new -T <topic> --regex '<pattern>'` appends or replaces that topic's regex in `topics.reg` using tab-separated rows (`topic<TAB>regex`).
 - `bus start` launches `zshmq_bus_loop`, which tails `bus.fifo`, filters `PUB|bus|...` frames, and for every registry entry runs `grep -E` against the message payload.
 - Matching topics are published via `bus_publish_to_topic`, which requires their dispatcher PID to be healthy before writing `PUB|topic|message` into the topic FIFO.
 - Topic dispatchers fan the message out to subscribers the same way as the direct topic workflow; unmatched payloads only emit TRACE diagnostics so default executions stay silent.
@@ -153,7 +153,7 @@ Initialise the runtime directory (default `/tmp/zshmq`). Run this once per envir
 ```bash
 zshmq topic new -T topic [--regex REGEX]
 ```
-Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route. When the routing bus is enabled (see below), supply `--regex` to register the topic's fan-out rule in the shared `topics` registry; leave the regex empty to opt out of bus deliveries for that topic.
+Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route. When the routing bus is enabled (see below), supply `--regex` to register the topic's fan-out rule in the shared `topics.reg` registry; leave the regex empty to opt out of bus deliveries for that topic.
 
 ### Step 3: Start Dispatcher
 ```bash
@@ -179,7 +179,7 @@ zshmq topic start --topic alerts
 # Publish via the bus; any matching topics receive the message concurrently
 zshmq topic send --topic bus "ALERT system down"
 ```
-Update a topic's regex by re-running `zshmq topic new -T <topic> --regex '<pattern>'`. Destroying a topic (or running `zshmq bus destroy`) removes its registry entry automatically. Restarting is optional: the bus reloads `topics` on every message so changes apply immediately.
+Update a topic's regex by re-running `zshmq topic new -T <topic> --regex '<pattern>'`. Destroying a topic (or running `zshmq bus destroy`) removes its registry entry automatically. Restarting is optional: the bus reloads `topics.reg` on every message so changes apply immediately.
 
 ### Step 4: Subscribe to a Topic
 ```bash
@@ -227,32 +227,36 @@ zshmq ctx destroy
 Removes `/tmp/zshmq` (or the directory specified with `--path` / `$ZSHMQ_CTX_ROOT`). Use `--force` if additional files remain inside the runtime directory. Run `zshmq topic destroy -T <topic>` first if you only need to clean up specific topic assets.
 
 ### Command Reference
-Command	Description
-zshmq ctx new [--path PATH]	Create or reset the runtime directory (default: /tmp/zshmq)
-zshmq ctx destroy [--force]	Remove the runtime directory (default: /tmp/zshmq); use --force to delete non-empty directories
-zshmq bus new [--path PATH]	Provision the special bus topic and ensure it is present in the topics registry
-zshmq bus start [--path PATH]	Start the bus dispatcher (use --foreground to stay attached to the terminal)
-zshmq bus stop [--path PATH]	Stop the bus dispatcher
-zshmq bus destroy [--path PATH]	Remove the bus topic and its registry entry
-zshmq topic new -T <topic> [--regex REGEX]	Create/update the FIFO/state pair and register the topic's bus regex (omit or empty regex to disable forwarding)
-zshmq topic destroy -T <topic> [--regex REGEX]	Remove the FIFO/state pair and drop the registry entry
-zshmq topic start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
-zshmq topic send --topic <topic> <message>	Publish a message for the topic
-zshmq topic sub --topic <topic>	Subscribe to messages on the topic
-zshmq list	Show active subscribers
-zshmq unsub	Unregister the current subscriber
-zshmq topic stop --topic <topic>	Stop the dispatcher for a topic
-zshmq --help	Show usage
-zshmq --version	Display version info
+
+| Command | Description |
+| --- | --- |
+| `zshmq ctx new [--path PATH]` | Create or reset the runtime directory (default: `/tmp/zshmq`). |
+| `zshmq ctx destroy [--force]` | Remove the runtime directory; use `--force` to delete non-empty directories. |
+| `zshmq bus new [--path PATH]` | Provision the special bus topic and ensure it appears in `topics.reg`. |
+| `zshmq bus start [--path PATH]` | Start the bus dispatcher (use `--foreground` to stay attached to the terminal). |
+| `zshmq bus stop [--path PATH]` | Stop the bus dispatcher. |
+| `zshmq bus destroy [--path PATH]` | Remove the bus topic and its registry entry. |
+| `zshmq topic new -T <topic> [--regex REGEX]` | Create/update the FIFO/state pair and register the topic's bus regex (omit or leave empty to disable forwarding). |
+| `zshmq topic destroy -T <topic> [--regex REGEX]` | Remove the FIFO/state pair and drop the registry entry. |
+| `zshmq topic start --topic <topic>` | Start the dispatcher process (use `--foreground` to stay attached to the terminal). |
+| `zshmq topic send --topic <topic> <message>` | Publish a message for the topic. |
+| `zshmq topic sub --topic <topic>` | Subscribe to messages on the topic. |
+| `zshmq list` | Show active subscribers. |
+| `zshmq unsub` | Unregister the current subscriber. |
+| `zshmq topic stop --topic <topic>` | Stop the dispatcher for a topic. |
+| `zshmq --help` | Show usage. |
+| `zshmq --version` | Display version info. |
 
 ### Environment Variables
-Variable	Default	Description
-ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx new
-ZSHMQ_TOPIC	/tmp/zshmq/topic.fifo	Main FIFO path
-ZSHMQ_STATE	/tmp/zshmq/topic.state	Subscription table
-ZSHMQ_TOPIC_PID	/tmp/zshmq/topic.pid	PID file tracked by topic start/stop (falls back to ZSHMQ_DISPATCH_PID when set)
-ZSHMQ_DISPATCH_PID	-	Deprecated alias for ZSHMQ_TOPIC_PID (retained for backward compatibility)
-ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by -d/--debug and -t/--trace
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ZSHMQ_CTX_ROOT` | `/tmp/zshmq` | Root directory initialised by `ctx new`. |
+| `ZSHMQ_TOPIC` | `/tmp/zshmq/topic.fifo` | Main topic FIFO path. |
+| `ZSHMQ_STATE` | `/tmp/zshmq/topic.state` | Subscription table. |
+| `ZSHMQ_TOPIC_PID` | `/tmp/zshmq/topic.pid` | PID file tracked by `topic start/stop` (falls back to `ZSHMQ_DISPATCH_PID`). |
+| `ZSHMQ_DISPATCH_PID` | `-` | Deprecated alias for `ZSHMQ_TOPIC_PID` (retained for backwards compatibility). |
+| `ZSHMQ_LOG_LEVEL` | `INFO` | Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by `-d/--debug` and `-t/--trace`. |
 
 ### Example Session
 
@@ -307,12 +311,13 @@ Subscriber Output
 
 ## Design Philosophy
 
-**Principle	Description**
-Zero dependencies	Pure POSIX implementation
-Brokerless	Simple dispatcher; no background services
-Transparent messages	Human-readable text
-Efficient	Blocking I/O, 0 % CPU idle
-Educational	Teaches message-passing concepts with FIFOs
+| Principle | Description |
+| --- | --- |
+| Zero dependencies | Pure POSIX implementation. |
+| Brokerless | Simple dispatcher; no background services. |
+| Transparent messages | Human-readable text. |
+| Efficient | Blocking I/O, near-zero CPU when idle. |
+| Educational | Teaches message-passing concepts with FIFOs. |
 
 ## License
 
