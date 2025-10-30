@@ -2,10 +2,10 @@
 # shellcheck shell=sh
 
 #/**
-# dispatch start - Launch the dispatcher loop for a topic.
-# @usage: zshmq dispatch start --topic TOPIC [--path PATH]
-# @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
-# @description: Validate an existing runtime directory created by ctx new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main topic FIFO.
+# topic start - Launch the dispatcher loop for a topic.
+# @usage: zshmq topic start --topic TOPIC [--path PATH]
+# @summary: Spawn the topic dispatcher (default runtime: /tmp/zshmq) in the background.
+# @description: Validates a runtime directory created by `ctx new`, then spawns the dispatcher loop so publishers and subscribers can exchange messages via the topic FIFO. Supports foreground mode for debugging.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -T, --topic TOPIC  Topic name handled by this dispatcher.
 # @option: -f, --foreground   Run the dispatcher in the foreground.

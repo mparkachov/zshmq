@@ -37,8 +37,6 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/topic_sub.sh"
   # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/dispatch.sh"
-  # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/bus.sh"
 fi
 
@@ -109,9 +107,6 @@ case $command_name in
     ;;
   topic)
     topic "$@"
-    ;;
-  dispatch)
-    dispatch "$@"
     ;;
   bus)
     bus "$@"

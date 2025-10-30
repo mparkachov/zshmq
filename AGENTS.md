@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Keep the command-line entrypoint in the repository root during development, but ensure the release-ready binary lands in `bin/`. Place reusable logic in `lib/`, one function per file, e.g., `lib/dispatch.sh` and `lib/publisher.sh`. Specs live under `spec/` following ShellSpec conventions (`spec/lib/dispatch_spec.sh`). Temporary assets belong in `tmp/` and should be ignored by Git. Update `README.md` and `AGENT.md` whenever the public interface or build contract changes. Configure every tool dependency as a Git submodule and avoid assuming anything beyond a POSIX shell is installed on the system.
+Keep the command-line entrypoint in the repository root during development, but ensure the release-ready binary lands in `bin/`. Place reusable logic in `lib/`, one function per file, e.g., `lib/topic_start.sh` and `lib/publisher.sh`. Specs live under `spec/` following ShellSpec conventions (`spec/lib/topic_dispatch_spec.sh`). Temporary assets belong in `tmp/` and should be ignored by Git. Update `README.md` and `AGENT.md` whenever the public interface or build contract changes. Configure every tool dependency as a Git submodule and avoid assuming anything beyond a POSIX shell is installed on the system.
 
 Do not hand-edit the bundled `./zshmq` release script. Always regenerate it with `make release` after curating `VERSION` so the embedded code stays in sync with `lib/`.
 
@@ -24,10 +24,10 @@ Favor `DEBUG` (or `TRACE`) for success-path diagnostics so that default INFO exe
 
 ## Testing Guidelines
 Write a ShellSpec file for every module under `lib/`. Name contexts after the command or function (`Describe dispatcher_loop`). Use doubles and fixtures in `spec/support/` instead of touching `/tmp`. Add regression specs for bugs before fixing them. Aim to cover both happy paths and failure modes such as FIFO contention or missing environment variables.
-Foreground-oriented workflows (e.g., `topic sub`, `dispatch start --foreground`) must be validated manually; avoid exercising long-lived streaming loops from ShellSpec to prevent hangs.
+Foreground-oriented workflows (e.g., `topic sub`, `topic start --foreground`) must be validated manually; avoid exercising long-lived streaming loops from ShellSpec to prevent hangs.
 
 ## Commit & Pull Request Guidelines
 Follow Conventional Commits (`feat:`, `fix:`, `chore:`) for easy changelog generation. Keep commits small and scoped to one concern. Pull requests should include a concise summary, testing note (`shellspec` output or manual steps), and a validation snippet demonstrating the CLI (`./bin/zshmq.sh topic send --topic topic "test"`). Reference related issues and add screenshots or transcripts when behavior is user-facing.
 
 ## Security & Environment Tips
-Never commit actual FIFOs or files created in `/tmp`. Sanitize topic names received from users before interpolation. When testing locally, override `ZSHMQ_TOPIC` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_TOPIC=$PWD/tmp/topic.fifo`). Clean up stray FIFOs with `./bin/zshmq.sh dispatch stop --topic <topic>` or manual `rm` to prevent resource leaks.
+Never commit actual FIFOs or files created in `/tmp`. Sanitize topic names received from users before interpolation. When testing locally, override `ZSHMQ_TOPIC` and `ZSHMQ_STATE` to point inside the repository (`export ZSHMQ_TOPIC=$PWD/tmp/topic.fifo`). Clean up stray FIFOs with `./bin/zshmq.sh topic stop --topic <topic>` or manual `rm` to prevent resource leaks.

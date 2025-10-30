@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 ZSHMQ_EMBEDDED=1
-ZSHMQ_VERSION=0.0.3
+ZSHMQ_VERSION=0.0.4
 
 # shellcheck shell=sh disable=SC2016,SC2317
 # [getoptions] License: Creative Commons Zero v1.0 Universal
@@ -1097,8 +1097,9 @@ ctx_destroy_impl() {
     return 0
   fi
 
-  if [ -n "${ZSHMQ_DISPATCH_PID:-}" ]; then
-    pid_path=$ZSHMQ_DISPATCH_PID
+  pid_override=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-}}
+  if [ -n "$pid_override" ]; then
+    pid_path=$pid_override
     if [ -f "$pid_path" ]; then
       rm -f "$pid_path"
       zshmq_log_debug 'ctx destroy: removed pid=%s' "$pid_path"
@@ -1246,133 +1247,34 @@ fi
 # shellcheck shell=sh
 
 #/**
-# dispatch - Manage dispatcher processes for zshmq topics.
-# @usage: zshmq dispatch <command> [options]
-# @summary: Start or stop the dispatcher that routes messages for a topic.
-# @description: Provides subcommands to launch the background dispatcher loop (`dispatch start`) or terminate it (`dispatch stop`). Each subcommand accepts shared options for selecting the runtime directory and topic, along with the standard logging controls.
+# topic send - Publish a message to the zshmq dispatcher.
+# @usage: zshmq topic send --topic TOPIC [--path PATH] MESSAGE...
+# @summary: Publish a message through the dispatcher FIFO.
+# @description: Validate the runtime directory, ensure the dispatcher is running, and write the message to the topic-specific FIFO so subscribers receive it.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
-# @option: -T, --topic TOPIC  Topic name handled by the dispatcher subcommand.
-# @option: -f, --foreground   (dispatch start) Run the dispatcher in the foreground.
+# @option: -T, --topic TOPIC  Topic name for the published message (required).
 # @option: -d, --debug        Enable DEBUG log level.
 # @option: -t, --trace        Enable TRACE log level.
 # @option: -h, --help         Display command documentation and exit.
 #*/
 
-dispatch_print_usage() {
-  printf '%s\n' 'Usage: zshmq dispatch <command> [options]'
-  printf '%s\n' ''
-  printf '%s\n' 'Commands:'
-  printf '  start  Launch the dispatcher for a topic\n'
-  printf '  stop   Terminate the dispatcher for a topic\n'
-}
-
-dispatch_start_parser_definition() {
+topic_send_parser_definition() {
   zshmq_parser_defaults
-  param DISPATCH_CTX_PATH -p --path -- 'Runtime directory to target'
-  param DISPATCH_TOPIC -T --topic -- 'Topic name handled by this dispatcher'
-  flag DISPATCH_FOREGROUND -f --foreground -- 'Run the dispatcher in the foreground'
+  param CTX_PATH -p --path -- 'Runtime directory to target'
+  param TOPIC_SEND_TOPIC -T --topic -- 'Explicit topic to apply'
 }
 
-dispatcher_extract_fifo_pid() {
-  fifo_path=$1
-  name=${fifo_path##*/}
-  pid=${name##*.}
-  case $pid in
-    ''|*[!0-9]*)
-      printf '%s\n' ''
-      return 1
-      ;;
-  esac
-  printf '%s\n' "$pid"
-  return 0
+topic_send_trim() {
+  # Trim leading and trailing whitespace in a POSIX-safe way.
+  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
-dispatcher_prune_state() {
-  state_path=$1
-  tmp_state="${state_path}.dispatcher.$$"
-  : > "$tmp_state"
-  while IFS= read -r fifo || [ -n "$fifo" ]; do
-    [ -n "$fifo" ] || continue
-    fifo_pid=$(dispatcher_extract_fifo_pid "$fifo")
-    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
-      if [ -p "$fifo" ]; then
-        printf '%s\n' "$fifo" >> "$tmp_state"
-      fi
-    else
-      rm -f "$fifo" 2>/dev/null || :
-    fi
-  done < "$state_path"
-  mv "$tmp_state" "$state_path"
-}
-
-zshmq_dispatch_loop() {
-  topic_fifo_path=$1
-  state_path=$2
-
-  trap 'exec 3>&-; exit 0' INT TERM HUP
-
-  # Keep the FIFO open even when no writers are connected.
-  exec 3<>"$topic_fifo_path"
-
-  while IFS= read -r line <&3; do
-    case $line in
-      SUB\|*)
-        entry=${line#SUB|}
-        if [ -n "$entry" ]; then
-          [ -f "$state_path" ] || : > "$state_path"
-          if ! grep -F -- "$entry" "$state_path" >/dev/null 2>&1; then
-            printf '%s\n' "$entry" >> "$state_path"
-          fi
-        fi
-        ;;
-      UNSUB\|*)
-        entry=${line#UNSUB|}
-        if [ -n "$entry" ] && [ -f "$state_path" ]; then
-          tmp_state="${state_path}.tmp.$$"
-          : > "$tmp_state"
-          while IFS= read -r state_line || [ -n "$state_line" ]; do
-            [ "$state_line" = "$entry" ] && continue
-            printf '%s\n' "$state_line" >> "$tmp_state"
-          done < "$state_path"
-          mv "$tmp_state" "$state_path"
-        fi
-        ;;
-      PUB\|*)
-        payload=${line#PUB|}
-        topic=${payload%%|*}
-        message=${payload#*|}
-        if [ -f "$state_path" ] && [ -n "$topic" ]; then
-          message_body=$message
-          if [ -s "$state_path" ]; then
-            dispatcher_prune_state "$state_path"
-          fi
-          zshmq_log_trace 'dispatcher: topic=%s message=%s' "$topic" "$message_body"
-          while IFS= read -r fifo_path || [ -n "$fifo_path" ]; do
-            [ -n "$fifo_path" ] || continue
-            fifo_pid=$(dispatcher_extract_fifo_pid "$fifo_path")
-            if [ -z "$fifo_pid" ] || ! kill -0 "$fifo_pid" 2>/dev/null; then
-              continue
-            fi
-            if [ -p "$fifo_path" ]; then
-              zshmq_log_trace 'dispatcher: deliver topic=%s message=%s fifo=%s' "$topic" "$message_body" "$fifo_path"
-              { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
-            fi
-          done < "$state_path"
-        fi
-        ;;
-      *)
-        :
-        ;;
-    esac
-  done
-}
-
-dispatch_start() {
+topic_send() {
   set -eu
 
   if ! command -v getoptions >/dev/null 2>&1; then
     if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'dispatch start: ZSHMQ_ROOT is not set'
+      zshmq_log_error 'topic send: ZSHMQ_ROOT is not set'
       return 1
     fi
     # shellcheck disable=SC1090
@@ -1383,10 +1285,10 @@ dispatch_start() {
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
-  unset DISPATCH_FOREGROUND ||:
+  ZSHMQ_PARSER_USAGE='zshmq topic send --topic TOPIC [--path PATH] MESSAGE...'
 
   set +e
-  zshmq_eval_parser dispatch_start dispatch_start_parser_definition "$@"
+  zshmq_eval_parser topic_send topic_send_parser_definition "$@"
   status=$?
   set -e
 
@@ -1402,300 +1304,86 @@ dispatch_start() {
       ;;
   esac
 
-  if [ $# -gt 0 ]; then
-    zshmq_log_error 'dispatch start: unexpected argument -- %s' "$1"
-    return 1
-  fi
-
-  unset ZSHMQ_REST ||:
-
-  topic=${DISPATCH_TOPIC:-}
+  topic=${TOPIC_SEND_TOPIC:-}
   if [ -z "$topic" ]; then
-    zshmq_log_error 'dispatch start: --topic is required'
+    zshmq_log_error 'topic send: --topic is required'
     return 1
   fi
 
-  target=${DISPATCH_CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
+  if [ $# -eq 0 ]; then
+    zshmq_log_error 'topic send: message is required'
+    return 1
+  fi
+
+  message=$1
+  shift
+  if [ $# -gt 0 ]; then
+    message="$message $*"
+  fi
+
+  topic=$(topic_send_trim "$topic")
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'topic send: topic must not be empty'
+    return 1
+  fi
+
+  case $topic in
+    *'|'*)
+      zshmq_log_error 'topic send: topic must not contain "|"'
+      return 1
+      ;;
+  esac
+
+  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
   if [ -z "$target" ]; then
-    zshmq_log_error 'dispatch start: target path is empty'
+    zshmq_log_error 'topic send: target path is empty'
     return 1
   fi
 
   case $target in
     /|'')
-      zshmq_log_error 'dispatch start: refusing to operate on root directory'
+      zshmq_log_error 'topic send: refusing to operate on root directory'
       return 1
       ;;
   esac
 
   runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
+  pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
 
   if [ ! -d "$target" ]; then
-    zshmq_log_error 'dispatch start: runtime directory not found: %s' "$target"
+    zshmq_log_error 'topic send: runtime directory not found: %s' "$target"
     return 1
   fi
 
   if [ ! -p "$topic_fifo_path" ]; then
-    zshmq_log_error 'dispatch start: topic FIFO not found at %s' "$topic_fifo_path"
-    return 1
-  fi
-
-  if [ ! -f "$state_path" ]; then
-    zshmq_log_error 'dispatch start: state file not found at %s' "$state_path"
+    zshmq_log_error 'topic send: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
   if [ -f "$pid_path" ]; then
-    existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-    if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-      zshmq_log_debug 'dispatch start: dispatcher already running (pid=%s)' "$existing_pid"
-      return 1
-    fi
-    rm -f "$pid_path"
+    dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
+  else
+    dispatcher_pid=
   fi
 
-  if [ "${DISPATCH_FOREGROUND:-0}" = "1" ]; then
-    zshmq_dispatch_loop "$topic_fifo_path" "$state_path" &
-    dispatcher_pid=$!
-    printf '%s\n' "$dispatcher_pid" > "$pid_path"
-    zshmq_log_debug 'Dispatcher started (pid=%s)' "$dispatcher_pid"
-
-    dispatch_start_cleaned=0
-
-    dispatch_start_cleanup() {
-      if [ "${dispatch_start_cleaned}" -eq 1 ]; then
-        return 0
-      fi
-      dispatch_start_cleaned=1
-      trap - INT TERM HUP EXIT
-      if [ -n "${dispatcher_pid:-}" ] && kill -0 "$dispatcher_pid" 2>/dev/null; then
-        kill "$dispatcher_pid" 2>/dev/null || :
-        wait "$dispatcher_pid" 2>/dev/null || :
-      else
-        wait "$dispatcher_pid" 2>/dev/null || :
-      fi
-      rm -f "$pid_path"
-    }
-
-    trap 'dispatch_start_cleanup; exit 130' INT
-    trap 'dispatch_start_cleanup; exit 143' TERM
-    trap 'dispatch_start_cleanup; exit 129' HUP
-    trap 'dispatch_start_cleanup' EXIT
-
-    wait "$dispatcher_pid"
-    wait_status=$?
-    dispatch_start_cleanup
-    return "$wait_status"
+  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+    zshmq_log_error 'topic send: dispatcher is not running'
+    return 1
   fi
 
-  zshmq_dispatch_loop "$topic_fifo_path" "$state_path" &
-  dispatcher_pid=$!
-  printf '%s\n' "$dispatcher_pid" > "$pid_path"
-  zshmq_log_debug 'Dispatcher started (pid=%s)' "$dispatcher_pid"
+  zshmq_log_trace 'topic send: topic=%s message=%s' "$topic" "$message"
+  printf 'PUB|%s|%s\n' "$topic" "$message" > "$topic_fifo_path"
 }
-
-dispatch_stop_parser_definition() {
-  zshmq_parser_defaults
-  param DISPATCH_CTX_PATH -p --path -- 'Runtime directory to target'
-  param DISPATCH_TOPIC -T --topic -- 'Topic name whose dispatcher should be stopped'
-}
-
-dispatch_stop() {
-  set -eu
-
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'dispatch stop: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
-
-  set +e
-  zshmq_eval_parser dispatch_stop dispatch_stop_parser_definition "$@"
-  status=$?
-  set -e
-
-  case $status in
-    0)
-      eval "set -- $ZSHMQ_REST"
-      ;;
-    1)
-      return 1
-      ;;
-    2)
-      return 0
-      ;;
-  esac
-
-  if [ $# -gt 0 ]; then
-    zshmq_log_error 'dispatch stop: unexpected argument -- %s' "$1"
-    return 1
-  fi
-
-  unset ZSHMQ_REST ||:
-
-  topic=${DISPATCH_TOPIC:-}
-  pid_override=
-  if [ -z "$topic" ] && [ -n "${ZSHMQ_TOPIC:-}" ]; then
-    topic_source=$ZSHMQ_TOPIC
-    topic_basename=${topic_source##*/}
-    topic=${topic_basename%.fifo}
-    case $topic_source in
-      /*)
-        pid_override=${topic_source%.fifo}.pid
-        ;;
-      *)
-        pid_override=
-        ;;
-    esac
-  fi
-
-  if [ -z "$topic" ]; then
-    zshmq_log_error 'dispatch stop: --topic is required'
-    return 1
-  fi
-
-  target=${DISPATCH_CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
-
-  if [ -z "$target" ]; then
-    zshmq_log_error 'dispatch stop: target path is empty'
-    return 1
-  fi
-
-  case $target in
-    /|'')
-      zshmq_log_error 'dispatch stop: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  runtime_root=${target%/}
-  pid_path=${ZSHMQ_DISPATCH_PID:-}
-  if [ -z "$pid_path" ]; then
-    if [ -n "$pid_override" ]; then
-      pid_path=$pid_override
-    else
-      pid_path=${runtime_root}/${topic}.pid
-    fi
-  fi
-
-  if [ -z "$pid_path" ] || [ ! -f "$pid_path" ]; then
-    zshmq_log_debug 'Dispatcher is not running.'
-    return 0
-  fi
-
-  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  if [ -z "$dispatcher_pid" ]; then
-    rm -f "$pid_path"
-    zshmq_log_debug 'Dispatcher is not running.'
-    return 0
-  fi
-
-  if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    rm -f "$pid_path"
-    zshmq_log_debug 'Dispatcher is not running.'
-    return 0
-  fi
-
-  kill "$dispatcher_pid" 2>/dev/null || :
-
-  for attempt in 1 2 3 4 5; do
-    if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
-
-  if kill -0 "$dispatcher_pid" 2>/dev/null; then
-    zshmq_log_error 'dispatch stop: dispatcher (pid=%s) did not terminate' "$dispatcher_pid"
-    return 1
-  fi
-
-  rm -f "$pid_path"
-  zshmq_log_debug 'Dispatcher stopped (pid=%s)' "$dispatcher_pid"
-}
-
-dispatch() {
-  set -eu
-
-  log_level=${ZSHMQ_LOG_LEVEL:-INFO}
-
-  while [ $# -gt 0 ]; do
-    case $1 in
-      -d|--debug)
-        log_level=DEBUG
-        shift
-        ;;
-      -t|--trace)
-        log_level=TRACE
-        shift
-        ;;
-      -h|--help|help)
-        dispatch_print_usage
-        return 0
-        ;;
-      --)
-        shift
-        break
-        ;;
-      start|stop)
-        break
-        ;;
-      *)
-        break
-        ;;
-    esac
-  done
-
-  export ZSHMQ_LOG_LEVEL=$log_level
-
-  if [ $# -eq 0 ]; then
-    dispatch_print_usage
-    return 1
-  fi
-
-  subcommand=$1
-  shift
-
-  case $subcommand in
-    start)
-      dispatch_start "$@"
-      ;;
-    stop)
-      dispatch_stop "$@"
-      ;;
-    -h|--help|help)
-      dispatch_print_usage
-      ;;
-    *)
-      zshmq_log_error 'dispatch: unknown command -- %s' "$subcommand"
-      dispatch_print_usage
-      return 1
-      ;;
-  esac
-}
-
-if command -v zshmq_register_command >/dev/null 2>&1; then
-  zshmq_register_command dispatch
-fi
 
 # shellcheck shell=sh
 
 #/**
-# dispatch start - Launch the dispatcher loop for a topic.
-# @usage: zshmq dispatch start --topic TOPIC [--path PATH]
-# @summary: Launch the dispatcher (default root: /tmp/zshmq) in the background.
-# @description: Validate an existing runtime directory created by ctx new, then spawn the dispatcher loop so publishers and subscribers can communicate via the main topic FIFO.
+# topic start - Launch the dispatcher loop for a topic.
+# @usage: zshmq topic start --topic TOPIC [--path PATH]
+# @summary: Spawn the topic dispatcher (default runtime: /tmp/zshmq) in the background.
+# @description: Validates a runtime directory created by `ctx new`, then spawns the dispatcher loop so publishers and subscribers can exchange messages via the topic FIFO. Supports foreground mode for debugging.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -T, --topic TOPIC  Topic name handled by this dispatcher.
 # @option: -f, --foreground   Run the dispatcher in the foreground.
@@ -1709,10 +1397,10 @@ fi
 # shellcheck shell=sh
 
 #/**
-# dispatch stop - Terminate the dispatcher loop for a topic.
-# @usage: zshmq dispatch stop --topic TOPIC [--path PATH]
-# @summary: Stop the dispatcher running for the given runtime directory (default: /tmp/zshmq).
-# @description: Read the dispatcher PID from the runtime directory, send it SIGTERM, and remove the PID file once the dispatcher exits.
+# topic stop - Terminate the dispatcher loop for a topic.
+# @usage: zshmq topic stop --topic TOPIC [--path PATH]
+# @summary: Stop the dispatcher that serves a topic and remove its PID file.
+# @description: Looks up the dispatcher PID for the requested topic (or via environment overrides), sends a termination signal, waits briefly for shutdown, and cleans up PID artifacts. No-op when the dispatcher is already stopped.
 # @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
 # @option: -T, --topic TOPIC  Topic name whose dispatcher should be stopped.
 # @option: -d, --debug        Enable DEBUG log level.
@@ -1721,6 +1409,245 @@ fi
 #*/
 
 :
+
+# shellcheck shell=sh
+
+#/**
+# topic sub - Subscribe to messages for a specific topic.
+# @usage: zshmq topic sub --topic TOPIC [--path PATH]
+# @summary: Register a subscriber FIFO and stream dispatched messages for TOPIC.
+# @description: Validate the runtime directory, ensure the dispatcher is running, register the subscription with the dispatcher, and stream messages until interrupted.
+# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
+# @option: -T, --topic TOPIC  Topic name to subscribe to.
+# @option: -d, --debug        Enable DEBUG log level.
+# @option: -t, --trace        Enable TRACE log level.
+# @option: -h, --help         Display command documentation and exit.
+#*/
+
+topic_sub_parser_definition() {
+  zshmq_parser_defaults
+  param CTX_PATH -p --path -- 'Runtime directory to target'
+  param TOPIC_SUB_TOPIC -T --topic -- 'Topic name to subscribe to'
+}
+
+topic_sub_extract_fifo_pid() {
+  fifo_path=$1
+  name=${fifo_path##*/}
+  pid=${name##*.}
+  case $pid in
+    ''|*[!0-9]*)
+      printf '%s\n' ''
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$pid"
+  return 0
+}
+
+topic_sub_prune_state() {
+  state_path=$1
+  tmp_state="${state_path}.prune.$$"
+  : > "$tmp_state"
+  while IFS= read -r existing_fifo || [ -n "$existing_fifo" ]; do
+    [ -n "$existing_fifo" ] || continue
+    fifo_pid=$(topic_sub_extract_fifo_pid "$existing_fifo")
+    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
+      if [ -p "$existing_fifo" ]; then
+        printf '%s\n' "$existing_fifo" >> "$tmp_state"
+      fi
+    else
+      rm -f "$existing_fifo" 2>/dev/null || :
+    fi
+  done < "$state_path"
+  mv "$tmp_state" "$state_path"
+}
+
+topic_sub_cleanup() {
+  if [ "${TOPIC_SUB_CLEANED:-0}" -eq 1 ]; then
+    return 0
+  fi
+  TOPIC_SUB_CLEANED=1
+
+  if [ -n "${TOPIC_SUB_FIFO_FD:-}" ]; then
+    eval "exec ${TOPIC_SUB_FIFO_FD}>&-" 2>/dev/null || :
+  fi
+
+  if [ "${TOPIC_SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${TOPIC_SUB_TOPIC_FIFO_PATH:-}" ] && [ -n "${TOPIC_SUB_FIFO_PATH:-}" ]; then
+    if [ -n "${TOPIC_SUB_DISPATCHER_PID:-}" ] && kill -0 "$TOPIC_SUB_DISPATCHER_PID" 2>/dev/null; then
+      { printf 'UNSUB|%s\n' "$TOPIC_SUB_FIFO_PATH"; } > "$TOPIC_SUB_TOPIC_FIFO_PATH" 2>/dev/null || :
+    fi
+    TOPIC_SUB_REGISTERED=0
+  fi
+
+  if [ -n "${TOPIC_SUB_STATE_PATH:-}" ] && [ -f "${TOPIC_SUB_STATE_PATH:-}" ]; then
+    tmp_state="${TOPIC_SUB_STATE_PATH}.tmp.$$"
+    : > "$tmp_state"
+    while IFS= read -r state_line || [ -n "$state_line" ]; do
+      [ -n "$state_line" ] || continue
+      state_fifo=$state_line
+      if [ "$state_fifo" = "${TOPIC_SUB_FIFO_PATH:-}" ]; then
+        rm -f "$state_fifo" 2>/dev/null || :
+        continue
+      fi
+      fifo_pid=$(topic_sub_extract_fifo_pid "$state_fifo")
+      if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
+        if [ -p "$state_fifo" ]; then
+          printf '%s\n' "$state_fifo" >> "$tmp_state"
+        fi
+      else
+        rm -f "$state_fifo" 2>/dev/null || :
+      fi
+    done < "${TOPIC_SUB_STATE_PATH}"
+    mv "$tmp_state" "${TOPIC_SUB_STATE_PATH}"
+  fi
+
+  if [ -n "${TOPIC_SUB_FIFO_PATH:-}" ] && [ -e "$TOPIC_SUB_FIFO_PATH" ]; then
+    rm -f "$TOPIC_SUB_FIFO_PATH" 2>/dev/null || :
+  fi
+}
+
+topic_sub() {
+  set -eu
+
+  if ! command -v getoptions >/dev/null 2>&1; then
+    if [ -z "${ZSHMQ_ROOT:-}" ]; then
+      zshmq_log_error 'topic sub: ZSHMQ_ROOT is not set'
+      return 1
+    fi
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
+  fi
+
+  ZSHMQ_PARSER_USAGE='zshmq topic sub --topic TOPIC [--path PATH]'
+
+  set +e
+  zshmq_eval_parser topic_sub topic_sub_parser_definition "$@"
+  status=$?
+  set -e
+
+  case $status in
+    0)
+      eval "set -- $ZSHMQ_REST"
+      ;;
+    1)
+      return 1
+      ;;
+    2)
+      return 0
+      ;;
+  esac
+
+  if [ $# -gt 0 ]; then
+    zshmq_log_error 'topic sub: unexpected argument -- %s' "$1"
+    return 1
+  fi
+
+  topic=${TOPIC_SUB_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'topic sub: --topic is required'
+    return 1
+  fi
+
+  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
+
+  if [ -z "$target" ]; then
+    zshmq_log_error 'topic sub: target path is empty'
+    return 1
+  fi
+
+  case $target in
+    /|'')
+      zshmq_log_error 'topic sub: refusing to operate on root directory'
+      return 1
+      ;;
+  esac
+
+  if [ ! -d "$target" ]; then
+    zshmq_log_error 'topic sub: runtime directory not found: %s' "$target"
+    return 1
+  fi
+
+  runtime_root=${target%/}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
+  pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
+
+  if [ ! -f "$state_path" ]; then
+    zshmq_log_error 'topic sub: state file not found at %s' "$state_path"
+    return 1
+  fi
+
+  if [ ! -p "$topic_fifo_path" ]; then
+    zshmq_log_error 'topic sub: topic FIFO not found at %s' "$topic_fifo_path"
+    return 1
+  fi
+
+  if [ ! -f "$pid_path" ]; then
+    zshmq_log_error 'topic sub: dispatcher pid file not found at %s' "$pid_path"
+    return 1
+  fi
+
+  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
+  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+    zshmq_log_error 'topic sub: dispatcher is not running'
+    return 1
+  fi
+
+  TOPIC_SUB_DISPATCHER_PID=$dispatcher_pid
+
+  fifo_path=${runtime_root}/${topic}.$$
+  if [ -e "$fifo_path" ]; then
+    zshmq_log_error 'topic sub: subscriber fifo already exists at %s' "$fifo_path"
+    return 1
+  fi
+
+  if ! mkfifo "$fifo_path"; then
+    zshmq_log_error 'topic sub: failed to create fifo at %s' "$fifo_path"
+    return 1
+  fi
+
+  TOPIC_SUB_TOPIC_FIFO_PATH=$topic_fifo_path
+  TOPIC_SUB_FIFO_PATH=$fifo_path
+  TOPIC_SUB_FIFO_FD=9
+  TOPIC_SUB_CLEANED=0
+  TOPIC_SUB_REGISTERED=0
+  TOPIC_SUB_STATE_PATH=$state_path
+
+  if [ -s "$state_path" ]; then
+    topic_sub_prune_state "$state_path"
+  fi
+
+  trap 'topic_sub_cleanup; exit 130' INT
+  trap 'topic_sub_cleanup; exit 143' TERM
+  trap 'topic_sub_cleanup; exit 129' HUP
+  trap 'topic_sub_cleanup' EXIT
+
+  if ! { printf 'SUB|%s\n' "$fifo_path"; } > "$topic_fifo_path"; then
+    zshmq_log_error 'topic sub: failed to register with dispatcher'
+    topic_sub_cleanup
+    return 1
+  fi
+  TOPIC_SUB_REGISTERED=1
+
+  if ! exec 9<>"$fifo_path"; then
+    zshmq_log_error 'topic sub: unable to open fifo for reading'
+    topic_sub_cleanup
+    return 1
+  fi
+
+  zshmq_log_debug 'topic sub: subscribed to topic=%s fifo=%s' "$topic" "$fifo_path"
+
+  while IFS= read -r line <&9 || [ -n "$line" ]; do
+    zshmq_log_trace 'topic sub: received topic=%s message=%s' "$topic" "$line"
+    printf '%s\n' "$line"
+  done
+
+  topic_sub_cleanup
+}
 
 # shellcheck shell=sh
 
@@ -1742,6 +1669,8 @@ topic_print_usage() {
   printf '%s\n' 'Commands:'
   printf '  new      Initialise topic assets (-T/--topic required)\n'
   printf '  destroy  Remove topic assets    (-T/--topic required)\n'
+  printf '  start    Launch the topic dispatcher (-T/--topic required)\n'
+  printf '  stop     Terminate the topic dispatcher (-T/--topic required)\n'
   printf '  send     Publish a message      (-T/--topic required)\n'
   printf '  sub      Stream topic messages  (-T/--topic required)\n'
 }
@@ -2042,6 +1971,365 @@ topic_destroy() {
   fi
 }
 
+dispatcher_extract_fifo_pid() {
+  fifo_path=$1
+  name=${fifo_path##*/}
+  pid=${name##*.}
+  case $pid in
+    ''|*[!0-9]*)
+      printf '%s\n' ''
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$pid"
+  return 0
+}
+
+dispatcher_prune_state() {
+  state_path=$1
+  tmp_state="${state_path}.dispatcher.$$"
+  : > "$tmp_state"
+  while IFS= read -r fifo || [ -n "$fifo" ]; do
+    [ -n "$fifo" ] || continue
+    fifo_pid=$(dispatcher_extract_fifo_pid "$fifo")
+    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
+      if [ -p "$fifo" ]; then
+        printf '%s\n' "$fifo" >> "$tmp_state"
+      fi
+    else
+      rm -f "$fifo" 2>/dev/null || :
+    fi
+  done < "$state_path"
+  mv "$tmp_state" "$state_path"
+}
+
+zshmq_dispatch_loop() {
+  topic_fifo_path=$1
+  state_path=$2
+
+  trap 'exec 3>&-; exit 0' INT TERM HUP
+
+  # Keep the FIFO open even when no writers are connected.
+  exec 3<>"$topic_fifo_path"
+
+  while IFS= read -r line <&3; do
+    case $line in
+      SUB\|*)
+        entry=${line#SUB|}
+        if [ -n "$entry" ]; then
+          [ -f "$state_path" ] || : > "$state_path"
+          if ! grep -F -- "$entry" "$state_path" >/dev/null 2>&1; then
+            printf '%s\n' "$entry" >> "$state_path"
+          fi
+        fi
+        ;;
+      UNSUB\|*)
+        entry=${line#UNSUB|}
+        if [ -n "$entry" ] && [ -f "$state_path" ]; then
+          tmp_state="${state_path}.tmp.$$"
+          : > "$tmp_state"
+          while IFS= read -r state_line || [ -n "$state_line" ]; do
+            [ "$state_line" = "$entry" ] && continue
+            printf '%s\n' "$state_line" >> "$tmp_state"
+          done < "$state_path"
+          mv "$tmp_state" "$state_path"
+        fi
+        ;;
+      PUB\|*)
+        payload=${line#PUB|}
+        topic=${payload%%|*}
+        message=${payload#*|}
+        if [ -f "$state_path" ] && [ -n "$topic" ]; then
+          message_body=$message
+          if [ -s "$state_path" ]; then
+            dispatcher_prune_state "$state_path"
+          fi
+          zshmq_log_trace 'dispatcher: topic=%s message=%s' "$topic" "$message_body"
+          while IFS= read -r fifo_path || [ -n "$fifo_path" ]; do
+            [ -n "$fifo_path" ] || continue
+            fifo_pid=$(dispatcher_extract_fifo_pid "$fifo_path")
+            if [ -z "$fifo_pid" ] || ! kill -0 "$fifo_pid" 2>/dev/null; then
+              continue
+            fi
+            if [ -p "$fifo_path" ]; then
+              zshmq_log_trace 'dispatcher: deliver topic=%s message=%s fifo=%s' "$topic" "$message_body" "$fifo_path"
+              { printf '%s\n' "$message_body"; } >> "$fifo_path" 2>/dev/null || :
+            fi
+          done < "$state_path"
+        fi
+        ;;
+      *)
+        :
+        ;;
+    esac
+  done
+}
+
+topic_start_parser_definition() {
+  zshmq_parser_defaults
+  param TOPIC_START_CTX_PATH -p --path -- 'Runtime directory to target'
+  param TOPIC_START_TOPIC -T --topic -- 'Topic name handled by this dispatcher'
+  flag TOPIC_START_FOREGROUND -f --foreground -- 'Run the dispatcher in the foreground'
+}
+
+topic_start_cmd() {
+  set -eu
+
+  if ! command -v getoptions >/dev/null 2>&1; then
+    if [ -z "${ZSHMQ_ROOT:-}" ]; then
+      zshmq_log_error 'topic start: ZSHMQ_ROOT is not set'
+      return 1
+    fi
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
+  fi
+
+  unset TOPIC_START_FOREGROUND || :
+
+  set +e
+  zshmq_eval_parser topic_start topic_start_parser_definition "$@"
+  status=$?
+  set -e
+
+  case $status in
+    0)
+      eval "set -- $ZSHMQ_REST"
+      ;;
+    1)
+      return 1
+      ;;
+    2)
+      return 0
+      ;;
+  esac
+
+  if [ $# -gt 0 ]; then
+    zshmq_log_error 'topic start: unexpected argument -- %s' "$1"
+    return 1
+  fi
+
+  unset ZSHMQ_REST || :
+
+  topic=${TOPIC_START_TOPIC:-}
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'topic start: --topic is required'
+    return 1
+  fi
+
+  target=${TOPIC_START_CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
+
+  if [ -z "$target" ]; then
+    zshmq_log_error 'topic start: target path is empty'
+    return 1
+  fi
+
+  case $target in
+    /|'')
+      zshmq_log_error 'topic start: refusing to operate on root directory'
+      return 1
+      ;;
+  esac
+
+  runtime_root=${target%/}
+  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
+  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
+  pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
+
+  if [ ! -d "$target" ]; then
+    zshmq_log_error 'topic start: runtime directory not found: %s' "$target"
+    return 1
+  fi
+
+  if [ ! -p "$topic_fifo_path" ]; then
+    zshmq_log_error 'topic start: topic FIFO not found at %s' "$topic_fifo_path"
+    return 1
+  fi
+
+  if [ ! -f "$state_path" ]; then
+    zshmq_log_error 'topic start: state file not found at %s' "$state_path"
+    return 1
+  fi
+
+  if [ -f "$pid_path" ]; then
+    existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
+    if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
+      zshmq_log_debug 'topic start: dispatcher already running (pid=%s)' "$existing_pid"
+      return 1
+    fi
+    rm -f "$pid_path"
+  fi
+
+  if [ "${TOPIC_START_FOREGROUND:-0}" = "1" ]; then
+    zshmq_dispatch_loop "$topic_fifo_path" "$state_path" &
+    dispatcher_pid=$!
+    printf '%s\n' "$dispatcher_pid" > "$pid_path"
+    zshmq_log_debug 'topic start: dispatcher started (pid=%s)' "$dispatcher_pid"
+
+    topic_start_cleaned=0
+
+    topic_start_cleanup() {
+      if [ "${topic_start_cleaned}" -eq 1 ]; then
+        return 0
+      fi
+      topic_start_cleaned=1
+      trap - INT TERM HUP EXIT
+      if [ -n "${dispatcher_pid:-}" ] && kill -0 "$dispatcher_pid" 2>/dev/null; then
+        kill "$dispatcher_pid" 2>/dev/null || :
+        wait "$dispatcher_pid" 2>/dev/null || :
+      else
+        wait "$dispatcher_pid" 2>/dev/null || :
+      fi
+      rm -f "$pid_path"
+    }
+
+    trap 'topic_start_cleanup; exit 130' INT
+    trap 'topic_start_cleanup; exit 143' TERM
+    trap 'topic_start_cleanup; exit 129' HUP
+    trap 'topic_start_cleanup' EXIT
+
+    wait "$dispatcher_pid"
+    wait_status=$?
+    topic_start_cleanup
+    return "$wait_status"
+  fi
+
+  zshmq_dispatch_loop "$topic_fifo_path" "$state_path" &
+  dispatcher_pid=$!
+  printf '%s\n' "$dispatcher_pid" > "$pid_path"
+  zshmq_log_debug 'topic start: dispatcher started (pid=%s)' "$dispatcher_pid"
+}
+
+topic_stop_parser_definition() {
+  zshmq_parser_defaults
+  param TOPIC_STOP_CTX_PATH -p --path -- 'Runtime directory to target'
+  param TOPIC_STOP_TOPIC -T --topic -- 'Topic name whose dispatcher should be stopped'
+}
+
+topic_stop_cmd() {
+  set -eu
+
+  if ! command -v getoptions >/dev/null 2>&1; then
+    if [ -z "${ZSHMQ_ROOT:-}" ]; then
+      zshmq_log_error 'topic stop: ZSHMQ_ROOT is not set'
+      return 1
+    fi
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
+    # shellcheck disable=SC1090
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
+  fi
+
+  set +e
+  zshmq_eval_parser topic_stop topic_stop_parser_definition "$@"
+  status=$?
+  set -e
+
+  case $status in
+    0)
+      eval "set -- $ZSHMQ_REST"
+      ;;
+    1)
+      return 1
+      ;;
+    2)
+      return 0
+      ;;
+  esac
+
+  if [ $# -gt 0 ]; then
+    zshmq_log_error 'topic stop: unexpected argument -- %s' "$1"
+    return 1
+  fi
+
+  unset ZSHMQ_REST || :
+
+  topic=${TOPIC_STOP_TOPIC:-}
+  pid_override=
+  if [ -z "$topic" ] && [ -n "${ZSHMQ_TOPIC:-}" ]; then
+    topic_source=$ZSHMQ_TOPIC
+    topic_basename=${topic_source##*/}
+    topic=${topic_basename%.fifo}
+    case $topic_source in
+      /*)
+        pid_override=${topic_source%.fifo}.pid
+        ;;
+      *)
+        pid_override=
+        ;;
+    esac
+  fi
+
+  if [ -z "$topic" ]; then
+    zshmq_log_error 'topic stop: --topic is required'
+    return 1
+  fi
+
+  target=${TOPIC_STOP_CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
+
+  if [ -z "$target" ]; then
+    zshmq_log_error 'topic stop: target path is empty'
+    return 1
+  fi
+
+  case $target in
+    /|'')
+      zshmq_log_error 'topic stop: refusing to operate on root directory'
+      return 1
+      ;;
+  esac
+
+  runtime_root=${target%/}
+  pid_env=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-}}
+  if [ -n "$pid_env" ]; then
+    pid_path=$pid_env
+  elif [ -n "$pid_override" ]; then
+    pid_path=$pid_override
+  else
+    pid_path=${runtime_root}/${topic}.pid
+  fi
+
+  if [ -z "$pid_path" ] || [ ! -f "$pid_path" ]; then
+    zshmq_log_debug 'topic stop: dispatcher is not running.'
+    return 0
+  fi
+
+  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
+  if [ -z "$dispatcher_pid" ]; then
+    rm -f "$pid_path"
+    zshmq_log_debug 'topic stop: dispatcher is not running.'
+    return 0
+  fi
+
+  if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+    rm -f "$pid_path"
+    zshmq_log_debug 'topic stop: dispatcher is not running.'
+    return 0
+  fi
+
+  kill "$dispatcher_pid" 2>/dev/null || :
+
+  for attempt in 1 2 3 4 5; do
+    if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+
+  if kill -0 "$dispatcher_pid" 2>/dev/null; then
+    zshmq_log_error 'topic stop: dispatcher (pid=%s) did not terminate' "$dispatcher_pid"
+    return 1
+  fi
+
+  rm -f "$pid_path"
+  zshmq_log_debug 'topic stop: dispatcher stopped (pid=%s)' "$dispatcher_pid"
+}
+
 topic() {
   set -eu
 
@@ -2120,6 +2408,20 @@ topic() {
       topic_regex=${TOPIC_REGEX-}
       topic_destroy "$runtime_root" "$topic_name" "$topic_regex"
       ;;
+    start)
+      if [ "$target_overridden" -eq 1 ]; then
+        topic_start_cmd --path "$target_path" "$@"
+      else
+        topic_start_cmd "$@"
+      fi
+      ;;
+    stop)
+      if [ "$target_overridden" -eq 1 ]; then
+        topic_stop_cmd --path "$target_path" "$@"
+      else
+        topic_stop_cmd "$@"
+      fi
+      ;;
     send)
       if [ "$target_overridden" -eq 1 ]; then
         CTX_PATH=$target_path topic_send "$@"
@@ -2149,378 +2451,6 @@ topic() {
 if command -v zshmq_register_command >/dev/null 2>&1; then
   zshmq_register_command topic
 fi
-
-# shellcheck shell=sh
-
-#/**
-# topic send - Publish a message to the zshmq dispatcher.
-# @usage: zshmq topic send --topic TOPIC [--path PATH] MESSAGE...
-# @summary: Publish a message through the dispatcher FIFO.
-# @description: Validate the runtime directory, ensure the dispatcher is running, and write the message to the topic-specific FIFO so subscribers receive it.
-# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
-# @option: -T, --topic TOPIC  Topic name for the published message (required).
-# @option: -d, --debug        Enable DEBUG log level.
-# @option: -t, --trace        Enable TRACE log level.
-# @option: -h, --help         Display command documentation and exit.
-#*/
-
-topic_send_parser_definition() {
-  zshmq_parser_defaults
-  param CTX_PATH -p --path -- 'Runtime directory to target'
-  param TOPIC_SEND_TOPIC -T --topic -- 'Explicit topic to apply'
-}
-
-topic_send_trim() {
-  # Trim leading and trailing whitespace in a POSIX-safe way.
-  printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-}
-
-topic_send() {
-  set -eu
-
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic send: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
-
-  ZSHMQ_PARSER_USAGE='zshmq topic send --topic TOPIC [--path PATH] MESSAGE...'
-
-  set +e
-  zshmq_eval_parser topic_send topic_send_parser_definition "$@"
-  status=$?
-  set -e
-
-  case $status in
-    0)
-      eval "set -- $ZSHMQ_REST"
-      ;;
-    1)
-      return 1
-      ;;
-    2)
-      return 0
-      ;;
-  esac
-
-  topic=${TOPIC_SEND_TOPIC:-}
-  if [ -z "$topic" ]; then
-    zshmq_log_error 'topic send: --topic is required'
-    return 1
-  fi
-
-  if [ $# -eq 0 ]; then
-    zshmq_log_error 'topic send: message is required'
-    return 1
-  fi
-
-  message=$1
-  shift
-  if [ $# -gt 0 ]; then
-    message="$message $*"
-  fi
-
-  topic=$(topic_send_trim "$topic")
-  if [ -z "$topic" ]; then
-    zshmq_log_error 'topic send: topic must not be empty'
-    return 1
-  fi
-
-  case $topic in
-    *'|'*)
-      zshmq_log_error 'topic send: topic must not contain "|"'
-      return 1
-      ;;
-  esac
-
-  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
-
-  if [ -z "$target" ]; then
-    zshmq_log_error 'topic send: target path is empty'
-    return 1
-  fi
-
-  case $target in
-    /|'')
-      zshmq_log_error 'topic send: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  runtime_root=${target%/}
-  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
-
-  if [ ! -d "$target" ]; then
-    zshmq_log_error 'topic send: runtime directory not found: %s' "$target"
-    return 1
-  fi
-
-  if [ ! -p "$topic_fifo_path" ]; then
-    zshmq_log_error 'topic send: topic FIFO not found at %s' "$topic_fifo_path"
-    return 1
-  fi
-
-  if [ -f "$pid_path" ]; then
-    dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  else
-    dispatcher_pid=
-  fi
-
-  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    zshmq_log_error 'topic send: dispatcher is not running'
-    return 1
-  fi
-
-  zshmq_log_trace 'topic send: topic=%s message=%s' "$topic" "$message"
-  printf 'PUB|%s|%s\n' "$topic" "$message" > "$topic_fifo_path"
-}
-
-# shellcheck shell=sh
-
-#/**
-# topic sub - Subscribe to messages for a specific topic.
-# @usage: zshmq topic sub --topic TOPIC [--path PATH]
-# @summary: Register a subscriber FIFO and stream dispatched messages for TOPIC.
-# @description: Validate the runtime directory, ensure the dispatcher is running, register the subscription with the dispatcher, and stream messages until interrupted.
-# @option: -p, --path PATH    Runtime directory to target (defaults to $ZSHMQ_CTX_ROOT or /tmp/zshmq).
-# @option: -T, --topic TOPIC  Topic name to subscribe to.
-# @option: -d, --debug        Enable DEBUG log level.
-# @option: -t, --trace        Enable TRACE log level.
-# @option: -h, --help         Display command documentation and exit.
-#*/
-
-topic_sub_parser_definition() {
-  zshmq_parser_defaults
-  param CTX_PATH -p --path -- 'Runtime directory to target'
-  param TOPIC_SUB_TOPIC -T --topic -- 'Topic name to subscribe to'
-}
-
-topic_sub_extract_fifo_pid() {
-  fifo_path=$1
-  name=${fifo_path##*/}
-  pid=${name##*.}
-  case $pid in
-    ''|*[!0-9]*)
-      printf '%s\n' ''
-      return 1
-      ;;
-  esac
-  printf '%s\n' "$pid"
-  return 0
-}
-
-topic_sub_prune_state() {
-  state_path=$1
-  tmp_state="${state_path}.prune.$$"
-  : > "$tmp_state"
-  while IFS= read -r existing_fifo || [ -n "$existing_fifo" ]; do
-    [ -n "$existing_fifo" ] || continue
-    fifo_pid=$(topic_sub_extract_fifo_pid "$existing_fifo")
-    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
-      if [ -p "$existing_fifo" ]; then
-        printf '%s\n' "$existing_fifo" >> "$tmp_state"
-      fi
-    else
-      rm -f "$existing_fifo" 2>/dev/null || :
-    fi
-  done < "$state_path"
-  mv "$tmp_state" "$state_path"
-}
-
-topic_sub_cleanup() {
-  if [ "${TOPIC_SUB_CLEANED:-0}" -eq 1 ]; then
-    return 0
-  fi
-  TOPIC_SUB_CLEANED=1
-
-  if [ -n "${TOPIC_SUB_FIFO_FD:-}" ]; then
-    eval "exec ${TOPIC_SUB_FIFO_FD}>&-" 2>/dev/null || :
-  fi
-
-  if [ "${TOPIC_SUB_REGISTERED:-0}" -eq 1 ] && [ -n "${TOPIC_SUB_TOPIC_FIFO_PATH:-}" ] && [ -n "${TOPIC_SUB_FIFO_PATH:-}" ]; then
-    if [ -n "${TOPIC_SUB_DISPATCHER_PID:-}" ] && kill -0 "$TOPIC_SUB_DISPATCHER_PID" 2>/dev/null; then
-      { printf 'UNSUB|%s\n' "$TOPIC_SUB_FIFO_PATH"; } > "$TOPIC_SUB_TOPIC_FIFO_PATH" 2>/dev/null || :
-    fi
-    TOPIC_SUB_REGISTERED=0
-  fi
-
-  if [ -n "${TOPIC_SUB_STATE_PATH:-}" ] && [ -f "${TOPIC_SUB_STATE_PATH:-}" ]; then
-    tmp_state="${TOPIC_SUB_STATE_PATH}.tmp.$$"
-    : > "$tmp_state"
-    while IFS= read -r state_line || [ -n "$state_line" ]; do
-      [ -n "$state_line" ] || continue
-      state_fifo=$state_line
-      if [ "$state_fifo" = "${TOPIC_SUB_FIFO_PATH:-}" ]; then
-        rm -f "$state_fifo" 2>/dev/null || :
-        continue
-      fi
-      fifo_pid=$(topic_sub_extract_fifo_pid "$state_fifo")
-      if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
-        if [ -p "$state_fifo" ]; then
-          printf '%s\n' "$state_fifo" >> "$tmp_state"
-        fi
-      else
-        rm -f "$state_fifo" 2>/dev/null || :
-      fi
-    done < "${TOPIC_SUB_STATE_PATH}"
-    mv "$tmp_state" "${TOPIC_SUB_STATE_PATH}"
-  fi
-
-  if [ -n "${TOPIC_SUB_FIFO_PATH:-}" ] && [ -e "$TOPIC_SUB_FIFO_PATH" ]; then
-    rm -f "$TOPIC_SUB_FIFO_PATH" 2>/dev/null || :
-  fi
-}
-
-topic_sub() {
-  set -eu
-
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic sub: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
-
-  ZSHMQ_PARSER_USAGE='zshmq topic sub --topic TOPIC [--path PATH]'
-
-  set +e
-  zshmq_eval_parser topic_sub topic_sub_parser_definition "$@"
-  status=$?
-  set -e
-
-  case $status in
-    0)
-      eval "set -- $ZSHMQ_REST"
-      ;;
-    1)
-      return 1
-      ;;
-    2)
-      return 0
-      ;;
-  esac
-
-  if [ $# -gt 0 ]; then
-    zshmq_log_error 'topic sub: unexpected argument -- %s' "$1"
-    return 1
-  fi
-
-  topic=${TOPIC_SUB_TOPIC:-}
-  if [ -z "$topic" ]; then
-    zshmq_log_error 'topic sub: --topic is required'
-    return 1
-  fi
-
-  target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
-
-  if [ -z "$target" ]; then
-    zshmq_log_error 'topic sub: target path is empty'
-    return 1
-  fi
-
-  case $target in
-    /|'')
-      zshmq_log_error 'topic sub: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  if [ ! -d "$target" ]; then
-    zshmq_log_error 'topic sub: runtime directory not found: %s' "$target"
-    return 1
-  fi
-
-  runtime_root=${target%/}
-  state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
-  topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
-
-  if [ ! -f "$state_path" ]; then
-    zshmq_log_error 'topic sub: state file not found at %s' "$state_path"
-    return 1
-  fi
-
-  if [ ! -p "$topic_fifo_path" ]; then
-    zshmq_log_error 'topic sub: topic FIFO not found at %s' "$topic_fifo_path"
-    return 1
-  fi
-
-  if [ ! -f "$pid_path" ]; then
-    zshmq_log_error 'topic sub: dispatcher pid file not found at %s' "$pid_path"
-    return 1
-  fi
-
-  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    zshmq_log_error 'topic sub: dispatcher is not running'
-    return 1
-  fi
-
-  TOPIC_SUB_DISPATCHER_PID=$dispatcher_pid
-
-  fifo_path=${runtime_root}/${topic}.$$
-  if [ -e "$fifo_path" ]; then
-    zshmq_log_error 'topic sub: subscriber fifo already exists at %s' "$fifo_path"
-    return 1
-  fi
-
-  if ! mkfifo "$fifo_path"; then
-    zshmq_log_error 'topic sub: failed to create fifo at %s' "$fifo_path"
-    return 1
-  fi
-
-  TOPIC_SUB_TOPIC_FIFO_PATH=$topic_fifo_path
-  TOPIC_SUB_FIFO_PATH=$fifo_path
-  TOPIC_SUB_FIFO_FD=9
-  TOPIC_SUB_CLEANED=0
-  TOPIC_SUB_REGISTERED=0
-  TOPIC_SUB_STATE_PATH=$state_path
-
-  if [ -s "$state_path" ]; then
-    topic_sub_prune_state "$state_path"
-  fi
-
-  trap 'topic_sub_cleanup; exit 130' INT
-  trap 'topic_sub_cleanup; exit 143' TERM
-  trap 'topic_sub_cleanup; exit 129' HUP
-  trap 'topic_sub_cleanup' EXIT
-
-  if ! { printf 'SUB|%s\n' "$fifo_path"; } > "$topic_fifo_path"; then
-    zshmq_log_error 'topic sub: failed to register with dispatcher'
-    topic_sub_cleanup
-    return 1
-  fi
-  TOPIC_SUB_REGISTERED=1
-
-  if ! exec 9<>"$fifo_path"; then
-    zshmq_log_error 'topic sub: unable to open fifo for reading'
-    topic_sub_cleanup
-    return 1
-  fi
-
-  zshmq_log_debug 'topic sub: subscribed to topic=%s fifo=%s' "$topic" "$fifo_path"
-
-  while IFS= read -r line <&9 || [ -n "$line" ]; do
-    zshmq_log_trace 'topic sub: received topic=%s message=%s' "$topic" "$line"
-    printf '%s\n' "$line"
-  done
-
-  topic_sub_cleanup
-}
 
 set -eu
 
@@ -2559,8 +2489,6 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   . "${ZSHMQ_ROOT}/lib/topic_send.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/topic_sub.sh"
-  # shellcheck disable=SC1091
-  . "${ZSHMQ_ROOT}/lib/dispatch.sh"
   # shellcheck disable=SC1091
   . "${ZSHMQ_ROOT}/lib/bus.sh"
 fi
@@ -2632,9 +2560,6 @@ case $command_name in
     ;;
   topic)
     topic "$@"
-    ;;
-  dispatch)
-    dispatch "$@"
     ;;
   bus)
     bus "$@"

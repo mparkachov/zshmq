@@ -163,7 +163,7 @@ topic_sub() {
   runtime_root=${target%/}
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
+  pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
 
   if [ ! -f "$state_path" ]; then
     zshmq_log_error 'topic sub: state file not found at %s' "$state_path"

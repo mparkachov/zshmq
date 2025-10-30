@@ -105,7 +105,7 @@ topic_send() {
 
   runtime_root=${target%/}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
-  pid_path=${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}
+  pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
 
   if [ ! -d "$target" ]; then
     zshmq_log_error 'topic send: runtime directory not found: %s' "$target"

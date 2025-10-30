@@ -13,7 +13,7 @@ It provides a simple **publish/subscribe** mechanism using only **FIFOs (named p
 - **Publish/Subscribe:** Multiple publishers and dynamic subscribers.
 - **Zero dependencies:** Uses only core Unix utilities.
 - **Efficient:** Blocking FIFO I/O -> near-zero CPU when idle.
-- **ZeroMQ-like CLI:** Familiar commands (`dispatch`, `topic send`, `topic sub`, etc.).
+- **ZeroMQ-like CLI:** Familiar commands (`topic start`, `topic send`, `topic sub`, etc.).
 - **Fan-out bus:** Optional router that forwards a single message to multiple topics based on regex rules.
 - **Tiny:** A single portable shell script.
 
@@ -44,8 +44,10 @@ It's perfect for:
 
 ## Architecture
 
+### Topic Dispatch Loop
+
 ```mermaid
-graph LR
+flowchart LR
   P1["Publisher 1"] --> FIFO[/tmp/zshmq/topic.fifo/]
   P2["Publisher 2"] --> FIFO
   FIFO --> D{"Dispatcher"}
@@ -53,9 +55,30 @@ graph LR
   D --> S2["Subscriber B<br/>(topic: test)"]
 ```
 
-- Publishers write messages into /tmp/zshmq/topic.fifo.
-- The Dispatcher reads messages and routes them to subscribers registered on that topic.
-- Each Subscriber owns its own FIFO (e.g. /tmp/zshmq/<topic>.<pid>).
+- Publishers write messages into `/tmp/zshmq/topic.fifo`.
+- The dispatcher (`topic start`) reads frames and forwards them to subscriber FIFOs registered in `/tmp/zshmq/topic.state`.
+- Each subscriber owns a dedicated FIFO (`/tmp/zshmq/topic.<pid>`) so delivery is fan-out by default.
+
+### Bus Regex Routing
+
+```mermaid
+flowchart TD
+  pub["Publisher<br/>topic send --topic bus"] --> bus_fifo{{"bus.fifo"}}
+  bus_fifo --> bus_loop["zshmq_bus_loop<br/>(bus dispatcher)"]
+  bus_loop --> registry["topics registry<br/>(tab-separated: topic\\tregex)"]
+  registry -- matches --> match{"grep -E<br/>regex match?"}
+  match -- yes --> alerts_fifo[/alerts.fifo/]
+  alerts_fifo --> alerts_dispatcher["topic start --topic alerts"]
+  alerts_dispatcher --> sub1["Subscriber 1<br/>alerts.<pid>"]
+  alerts_dispatcher --> sub2["Subscriber 2<br/>alerts.<pid>"]
+  match -- no --> drop["trace: no route"]
+```
+
+- `bus new` provisions the special `bus` topic and ensures the `topics` registry exists with a `bus` placeholder entry.
+- `topic new -T <topic> --regex '<pattern>'` appends or replaces that topic's regex in `topics` using tab-separated rows (`topic<TAB>regex`).
+- `bus start` launches `zshmq_bus_loop`, which tails `bus.fifo`, filters `PUB|bus|...` frames, and for every registry entry runs `grep -E` against the message payload.
+- Matching topics are published via `bus_publish_to_topic`, which requires their dispatcher PID to be healthy before writing `PUB|topic|message` into the topic FIFO.
+- Topic dispatchers fan the message out to subscribers the same way as the direct topic workflow; unmatched payloads only emit TRACE diagnostics so default executions stay silent.
 
 ## Installation
 
@@ -134,13 +157,13 @@ Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispa
 
 ### Step 3: Start Dispatcher
 ```bash
-zshmq dispatch start --topic topic
+zshmq topic start --topic topic
 ```
 Runs the router that listens for messages and subscription updates. This command expects `zshmq ctx new` to have prepared the runtime directory first and will exit with an error if the context is missing. Supply `--topic` to decide which FIFO/topic name the dispatcher should service.
 Pass `--foreground` (or `-f`) to keep the dispatcher attached to the current terminal; press `Ctrl+C` to stop it and clean up the PID file.
 
 ### Optional: Configure the Routing Bus
-The `bus` command provides a central fan-out dispatcher that reads messages from the special `bus` topic and forwards them to every topic whose registry regex matches the payload.
+The `bus` command provides a central fan-out dispatcher that reads messages from the special `bus` topic and forwards them to every topic whose registry regex matches the payload. Standard topic workflows (`topic new`, `topic start`, `topic send`, `topic sub`) operate entirely without the bus, so you only need these commands when you want regex-based fan-out.
 
 ```bash
 # Run once per runtime to provision the bus topic and registry entry
@@ -151,7 +174,7 @@ zshmq bus start
 
 # Register a topic and its matching rule
 zshmq topic new -T alerts --regex 'ALERT'
-zshmq dispatch start --topic alerts
+zshmq topic start --topic alerts
 
 # Publish via the bus; any matching topics receive the message concurrently
 zshmq topic send --topic bus "ALERT system down"
@@ -193,7 +216,7 @@ Removes your FIFO and deregisters from the dispatcher.
 
 ### Step 8: Stop Dispatcher
 ```bash
-zshmq dispatch stop --topic topic
+zshmq topic stop --topic topic
 ```
 Gracefully terminates the router for the supplied topic and cleans up /tmp/zshmq/topic.fifo.
 
@@ -213,12 +236,12 @@ zshmq bus stop [--path PATH]	Stop the bus dispatcher
 zshmq bus destroy [--path PATH]	Remove the bus topic and its registry entry
 zshmq topic new -T <topic> [--regex REGEX]	Create/update the FIFO/state pair and register the topic's bus regex (omit or empty regex to disable forwarding)
 zshmq topic destroy -T <topic> [--regex REGEX]	Remove the FIFO/state pair and drop the registry entry
-zshmq dispatch start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
+zshmq topic start --topic <topic>	Start the dispatcher process (use --foreground to stay attached to the terminal)
 zshmq topic send --topic <topic> <message>	Publish a message for the topic
 zshmq topic sub --topic <topic>	Subscribe to messages on the topic
 zshmq list	Show active subscribers
 zshmq unsub	Unregister the current subscriber
-zshmq dispatch stop --topic <topic>	Stop the dispatcher for a topic
+zshmq topic stop --topic <topic>	Stop the dispatcher for a topic
 zshmq --help	Show usage
 zshmq --version	Display version info
 
@@ -227,7 +250,8 @@ Variable	Default	Description
 ZSHMQ_CTX_ROOT	/tmp/zshmq	Root directory initialised by ctx new
 ZSHMQ_TOPIC	/tmp/zshmq/topic.fifo	Main FIFO path
 ZSHMQ_STATE	/tmp/zshmq/topic.state	Subscription table
-ZSHMQ_DISPATCH_PID	/tmp/zshmq/topic.pid	PID file tracked by dispatch start/stop
+ZSHMQ_TOPIC_PID	/tmp/zshmq/topic.pid	PID file tracked by topic start/stop (falls back to ZSHMQ_DISPATCH_PID when set)
+ZSHMQ_DISPATCH_PID	-	Deprecated alias for ZSHMQ_TOPIC_PID (retained for backward compatibility)
 ZSHMQ_LOG_LEVEL	INFO	Minimum log level emitted by the logger (TRACE, DEBUG, INFO, WARN, ERROR, FATAL); overridden by -d/--debug and -t/--trace
 
 ### Example Session
@@ -240,7 +264,7 @@ zshmq topic new -T topic
 
 Terminal 2 - Dispatcher
 ```bash
-zshmq dispatch start --topic topic
+zshmq topic start --topic topic
 ```
 
 Terminal 3 - Subscriber

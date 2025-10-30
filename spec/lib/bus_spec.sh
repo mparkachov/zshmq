@@ -5,7 +5,6 @@ Describe 'bus'
   Include lib/topic.sh
   Include lib/topic_send.sh
   Include lib/topic_sub.sh
-  Include lib/dispatch.sh
   Include lib/bus.sh
 
   zshmq_cli() {
@@ -46,7 +45,7 @@ Describe 'bus'
         esac
         topic_name=${pid_file##*/}
         topic_name=${topic_name%.pid}
-        zshmq_cli dispatch --path "$ZSHMQ_CTX_ROOT" stop --topic "$topic_name" >/dev/null 2>&1 || :
+        zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" stop --topic "$topic_name" >/dev/null 2>&1 || :
       done
     fi
   }
@@ -82,7 +81,7 @@ Describe 'bus'
     zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start >/dev/null 2>&1 || return 1
 
     zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex 'ALERT' >/dev/null 2>&1 || return 1
-    zshmq_cli dispatch --path "$ZSHMQ_CTX_ROOT" start --topic alerts >/dev/null 2>&1 || return 1
+    zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" start --topic alerts >/dev/null 2>&1 || return 1
 
     BUS_SPEC_SUBSCRIBER_LOG="$SHELLSPEC_TMPDIR/alerts.log"
     subscriber_fifo="$SHELLSPEC_TMPDIR/alerts_sub.fifo"
@@ -110,7 +109,7 @@ Describe 'bus'
     wait "$BUS_SPEC_SUBSCRIBER_PID" 2>/dev/null || :
     BUS_SPEC_SUBSCRIBER_PID=
 
-    zshmq_cli dispatch --path "$ZSHMQ_CTX_ROOT" stop --topic alerts >/dev/null 2>&1 || :
+    zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" stop --topic alerts >/dev/null 2>&1 || :
     zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" stop >/dev/null 2>&1 || :
 
     return 0

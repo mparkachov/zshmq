@@ -5,7 +5,6 @@ Describe 'topic send'
   Include lib/topic.sh
   Include lib/topic_send.sh
   Include lib/topic_sub.sh
-  Include lib/dispatch.sh
 
   before_each() {
     export ZSHMQ_ROOT="$PWD"
@@ -15,7 +14,7 @@ Describe 'topic send'
 
   after_each() {
     if [ -d "$ZSHMQ_CTX_ROOT" ]; then
-      dispatch stop --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1 || :
+      topic stop --path "$ZSHMQ_CTX_ROOT" --topic test >/dev/null 2>&1 || :
     fi
     if [ -n "${TOPIC_SEND_SPEC_DISPATCHER_PID:-}" ]; then
       kill "$TOPIC_SEND_SPEC_DISPATCHER_PID" >/dev/null 2>&1 || :

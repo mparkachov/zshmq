@@ -63,8 +63,9 @@ ctx_destroy_impl() {
     return 0
   fi
 
-  if [ -n "${ZSHMQ_DISPATCH_PID:-}" ]; then
-    pid_path=$ZSHMQ_DISPATCH_PID
+  pid_override=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-}}
+  if [ -n "$pid_override" ]; then
+    pid_path=$pid_override
     if [ -f "$pid_path" ]; then
       rm -f "$pid_path"
       zshmq_log_debug 'ctx destroy: removed pid=%s' "$pid_path"
