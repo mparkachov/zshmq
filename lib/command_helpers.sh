@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # shellcheck shell=sh
 
-: ${ZSHMQ_COMMAND_REGISTRY:=}
+: "${ZSHMQ_COMMAND_REGISTRY:=}"
 
 zshmq_register_command() {
   cmd=$1
@@ -109,8 +109,9 @@ zshmq_eval_parser() {
   unset ZSHMQ_DEBUG ||:
   unset ZSHMQ_TRACE ||:
   # shellcheck disable=SC2039
-  eval "$(getoptions $parser_fn zshmq_parse_runner)" || return 1
+  eval "$(getoptions "$parser_fn" zshmq_parse_runner)" || return 1
   zshmq_parse_runner "$@"
+  # shellcheck disable=SC2034
   ZSHMQ_REST=$REST
   if [ "${ZSHMQ_TRACE:-0}" = "1" ]; then
     ZSHMQ_LOG_LEVEL=TRACE

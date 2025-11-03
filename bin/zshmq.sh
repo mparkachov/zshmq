@@ -1,42 +1,43 @@
 #!/usr/bin/env sh
+# shellcheck source-path=SCRIPTDIR/..
 set -eu
 
 script_dir=$(
-  CDPATH= cd -- "$(dirname -- "$0")" && pwd
+  CDPATH='' cd -- "$(dirname -- "$0")" && pwd
 )
 if [ -n "${ZSHMQ_EMBEDDED:-}" ]; then
   ZSHMQ_ROOT=${script_dir}
 else
   ZSHMQ_ROOT=$(
-    CDPATH= cd -- "${script_dir}/.." && pwd
+    CDPATH='' cd -- "${script_dir}/.." && pwd
   )
 fi
 export ZSHMQ_ROOT
-export ZSHMQ_VERSION=${ZSHMQ_VERSION:-$( [ -f "${ZSHMQ_ROOT}/VERSION" ] && cat "${ZSHMQ_ROOT}/VERSION" || printf '%s\n' '0.0.1' )}
+export ZSHMQ_VERSION="${ZSHMQ_VERSION:-$( [ -f "${ZSHMQ_ROOT}/VERSION" ] && cat "${ZSHMQ_ROOT}/VERSION" || printf '%s\n' '0.0.1' )}"
 
 if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   # Load getoptions once so command implementations can rely on it.
-  # shellcheck disable=SC1090
+  # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
   . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-  # shellcheck disable=SC1090
+  # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
   . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-  # shellcheck disable=SC1090
+  # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
   . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/command_helpers.sh
   . "${ZSHMQ_ROOT}/lib/command_helpers.sh"
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/logging.sh
   . "${ZSHMQ_ROOT}/lib/logging.sh"
 
   # Load command implementations after helper definitions.
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/ctx.sh
   . "${ZSHMQ_ROOT}/lib/ctx.sh"
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/topic.sh
   . "${ZSHMQ_ROOT}/lib/topic.sh"
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/topic_send.sh
   . "${ZSHMQ_ROOT}/lib/topic_send.sh"
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/topic_sub.sh
   . "${ZSHMQ_ROOT}/lib/topic_sub.sh"
-  # shellcheck disable=SC1091
+  # shellcheck source=../lib/bus.sh
   . "${ZSHMQ_ROOT}/lib/bus.sh"
 fi
 
@@ -77,7 +78,7 @@ zshmq_show_help() {
   done
   printf '\n'
   printf '%s\n' 'Each command supports -h/--help plus -d/--debug and -t/--trace for log verbosity.'
-  printf '%s\n' 'Run `zshmq help <command>` or `zshmq <command> --help` for command-specific documentation.'
+  printf '%s\n' "Run 'zshmq help <command>' or 'zshmq <command> --help' for command-specific documentation."
 }
 
 if [ $# -eq 0 ]; then

@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
 cd "$REPO_ROOT"
 
@@ -19,6 +19,7 @@ fi
 
 set -- "$SHELLSPEC" --shell "$SHELLSPEC_SHELL"
 if [ -n "$SHELLSPEC_FLAGS" ]; then
+  # shellcheck disable=SC2086
   set -- "$@" $SHELLSPEC_FLAGS
 fi
 

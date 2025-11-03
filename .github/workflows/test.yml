@@ -19,6 +19,12 @@ jobs:
           submodules: recursive
       - name: Bootstrap project
         run: ./scripts/bootstrap.sh
+      - name: Install lint dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+      - name: Run ShellCheck
+        run: ./scripts/lint.sh
       - name: Prepare report directory
         run: mkdir -p tmp/reports
       - name: Run ShellSpec suite

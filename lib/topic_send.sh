@@ -32,14 +32,15 @@ topic_send() {
       zshmq_log_error 'topic send: ZSHMQ_ROOT is not set'
       return 1
     fi
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
+  # shellcheck disable=SC2034
   ZSHMQ_PARSER_USAGE='zshmq topic send --topic TOPIC [--path PATH] MESSAGE...'
 
   set +e
@@ -49,6 +50,7 @@ topic_send() {
 
   case $status in
     0)
+      : "${ZSHMQ_REST:=}"
       eval "set -- $ZSHMQ_REST"
       ;;
     1)

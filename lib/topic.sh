@@ -63,11 +63,9 @@ topic_registry_upsert() {
         ;;
     esac
     entry_topic=$registry_line
-    entry_regex=
     case $registry_line in
       *'	'*)
         entry_topic=${registry_line%%	*}
-        entry_regex=${registry_line#*	}
         ;;
     esac
     if [ "$entry_topic" = "$topic_name" ]; then
@@ -430,11 +428,11 @@ topic_start_cmd() {
       zshmq_log_error 'topic start: ZSHMQ_ROOT is not set'
       return 1
     fi
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
@@ -447,6 +445,7 @@ topic_start_cmd() {
 
   case $status in
     0)
+      : "${ZSHMQ_REST:=}"
       eval "set -- $ZSHMQ_REST"
       ;;
     1)
@@ -567,11 +566,11 @@ topic_stop_cmd() {
       zshmq_log_error 'topic stop: ZSHMQ_ROOT is not set'
       return 1
     fi
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
@@ -582,6 +581,7 @@ topic_stop_cmd() {
 
   case $status in
     0)
+      : "${ZSHMQ_REST:=}"
       eval "set -- $ZSHMQ_REST"
       ;;
     1)
@@ -665,6 +665,7 @@ topic_stop_cmd() {
   kill "$dispatcher_pid" 2>/dev/null || :
 
   for attempt in 1 2 3 4 5; do
+    : "$attempt"
     if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
       break
     fi
@@ -687,7 +688,7 @@ topic() {
   target_path=${ZSHMQ_CTX_ROOT:-/tmp/zshmq}
   target_overridden=0
 
-  export ZSHMQ_LOG_LEVEL=$log_level
+  export ZSHMQ_LOG_LEVEL="$log_level"
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -729,7 +730,7 @@ topic() {
     shift || :
   done
 
-  export ZSHMQ_LOG_LEVEL=$log_level
+  export ZSHMQ_LOG_LEVEL="$log_level"
 
   if [ $# -eq 0 ]; then
     topic_print_usage

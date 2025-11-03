@@ -222,6 +222,7 @@ bus_stop_runtime() {
   kill "$dispatcher_pid" 2>/dev/null || :
 
   for attempt in 1 2 3 4 5; do
+    : "$attempt"
     if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
       break
     fi
@@ -271,11 +272,12 @@ bus_start() {
       zshmq_log_error 'bus start: ZSHMQ_ROOT is not set'
       return 1
     fi
-    # shellcheck disable=SC1090
+    # Ensure vendor parser modules are available when getoptions is missing.
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
@@ -286,6 +288,7 @@ bus_start() {
 
   case $status in
     0)
+      : "${ZSHMQ_REST:=}"
       eval "set -- $ZSHMQ_REST"
       ;;
     1)
@@ -370,11 +373,11 @@ bus_stop() {
       zshmq_log_error 'bus stop: ZSHMQ_ROOT is not set'
       return 1
     fi
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck disable=SC1090
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
     . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
   fi
 
@@ -385,6 +388,7 @@ bus_stop() {
 
   case $status in
     0)
+      : "${ZSHMQ_REST:=}"
       eval "set -- $ZSHMQ_REST"
       ;;
     1)
@@ -466,7 +470,7 @@ bus() {
     shift || :
   done
 
-  export ZSHMQ_LOG_LEVEL=$log_level
+  export ZSHMQ_LOG_LEVEL="$log_level"
 
   if [ $# -eq 0 ]; then
     bus_print_usage

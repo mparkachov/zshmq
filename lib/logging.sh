@@ -36,17 +36,18 @@ zshmq_log() {
   normalized=$(printf '%s' "$level" | tr '[:lower:]' '[:upper:]')
   zshmq_log_should_emit "$normalized" || return 0
 
-  if [ $# -gt 0 ]; then
-    format=$1
-    shift || :
     if [ $# -gt 0 ]; then
-      message=$(printf "$format" "$@")
+      format=$1
+      shift || :
+      if [ $# -gt 0 ]; then
+        # shellcheck disable=SC2059
+        message=$(printf "$format" "$@")
+      else
+        message=$format
+      fi
     else
-      message=$format
+      message=
     fi
-  else
-    message=
-  fi
 
   timestamp=$(zshmq_log_timestamp)
   printf '%s [%s] %s\n' "$timestamp" "$normalized" "$message" >&2

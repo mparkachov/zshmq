@@ -144,7 +144,7 @@ ctx() {
     shift || :
   done
 
-  export ZSHMQ_LOG_LEVEL=$log_level
+  export ZSHMQ_LOG_LEVEL="$log_level"
 
   if [ $# -eq 0 ]; then
     ctx_print_usage

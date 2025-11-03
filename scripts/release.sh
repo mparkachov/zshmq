@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname "$0")" && pwd)
+REPO_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." && pwd)
 
 cd "$REPO_ROOT"
 
@@ -38,14 +38,15 @@ tmp=$(mktemp)
   sed '/^#!\/usr\/bin\/env sh/d' "lib/command_helpers.sh"
   printf '\n'
   sed '/^#!\/usr\/bin\/env sh/d' "lib/logging.sh"
-  for lib in $(cd lib && ls *.sh | sort); do
+  find lib -maxdepth 1 -type f -name '*.sh' -print | sort | while IFS= read -r lib_path; do
+    lib=${lib_path##*/}
     case "$lib" in
       command_helpers.sh|logging.sh)
         continue
         ;;
     esac
     printf '\n'
-    sed '/^#!\/usr\/bin\/env sh/d' "lib/$lib"
+    sed '/^#!\/usr\/bin\/env sh/d' "$lib_path"
   done
   printf '\n'
   tail -n +2 "$ZSHMQ_BIN"
