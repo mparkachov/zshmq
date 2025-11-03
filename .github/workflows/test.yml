@@ -18,11 +18,11 @@ jobs:
         with:
           submodules: recursive
       - name: Bootstrap project
-        run: make bootstrap
+        run: ./scripts/bootstrap.sh
       - name: Prepare report directory
         run: mkdir -p tmp/reports
       - name: Run ShellSpec suite
-        run: make test SHELLSPEC_SHELL=/bin/sh SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
+        run: SHELLSPEC_SHELL=/bin/sh SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports" ./scripts/test.sh
       - name: Publish test report
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2

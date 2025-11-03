@@ -3,14 +3,14 @@
 ## Project Structure & Module Organization
 Keep the command-line entrypoint in the repository root during development, but ensure the release-ready binary lands in `bin/`. Place reusable logic in `lib/`, one function per file, e.g., `lib/topic_start.sh` and `lib/publisher.sh`. Specs live under `spec/` following ShellSpec conventions (`spec/lib/topic_dispatch_spec.sh`). Temporary assets belong in `tmp/` and should be ignored by Git. Update `README.md` and `AGENT.md` whenever the public interface or build contract changes. Configure every tool dependency as a Git submodule and avoid assuming anything beyond a POSIX shell is installed on the system.
 
-Do not hand-edit the bundled `./zshmq` release script. Always regenerate it with `make release` after curating `VERSION` so the embedded code stays in sync with `lib/`.
+Do not hand-edit the bundled `./zshmq` release script. Always regenerate it with `./scripts/release.sh` after curating `VERSION` so the embedded code stays in sync with `lib/`.
 
 ## Build, Test, and Development Commands
-Expose every build, package, and test workflow through POSIX-compliant `make` targets (strictly POSIX make syntax - no GNU extensions). Provide at minimum `make build` to emit `bin/zshmq.sh` and `make test` to run the full ShellSpec suite; add focused targets or variables for module-level specs when useful. The underlying scripts may still live in `scripts/`, but users should be able to rely on `make` alone. Verify the CLI manually via `./bin/zshmq.sh <command> ...` before shipping a change.
+Expose every build, package, and test workflow through POSIX-compliant shell scripts in `scripts/`. Provide at minimum `./scripts/bootstrap.sh` to initialise dependencies, `./scripts/test.sh` to run ShellSpec, `./scripts/release.sh` to bundle the standalone binary, and `./scripts/publish.sh` to push tagged releases. Verify the CLI manually via `./bin/zshmq.sh <command> ...` before shipping a change.
 
 `zshmq ctx new` must bootstrap the runtime directory (default `/tmp/zshmq`) and rely on the vendored getoptions parser for command-line flags.
 
-Provide `make bootstrap` to initialise submodules and the local `tmp/` workspace before running other targets.
+Provide `./scripts/bootstrap.sh` to initialise submodules and the local `tmp/` workspace before running other targets.
 
 Use `zshmq topic new -T <topic> [--regex REGEX]` to create the FIFO/state assets for a topic and persist its routing regex; `ctx new` only prepares the runtime directory. Remove them via `zshmq topic destroy -T <topic>` when needed. Provision fan-out support with `zshmq bus new` / `zshmq bus start` so messages on the `bus` topic are forwarded according to the registry rules.
 
