@@ -90,7 +90,8 @@ Clone and install manually:
 ```bash
 git clone https://github.com/mparkachov/zshmq.git
 cd zshmq
-make release
+./scripts/bootstrap.sh
+./scripts/release.sh
 sudo cp ./zshmq /usr/local/bin/zshmq
 ```
 
@@ -99,59 +100,9 @@ Or run locally:
 zshmq <command> ...
 ```
 
-## Development Guidelines
+## Contributing
 
-- Initialize tool dependencies with `git submodule update --init --recursive`; every non-shell helper ships as a Git submodule.
-- Assume only a POSIX shell exists on the host; vendor any additional tooling through submodules.
-- Name new functions after their ZeroMQ counterparts (or close equivalents) to signal behavioral parity.
-
-## Testing
-
-Bootstrap vendored tooling and scaffolding:
-```sh
-make bootstrap
-```
-
-Run the ShellSpec suite:
-```sh
-make test
-```
-By default the suite executes with `/bin/sh`. Override via `make test SHELLSPEC_SHELL=path/to/shell`.
-
-Generate a JUnit report (ensure `tmp/reports` exists first):
-```sh
-mkdir -p tmp/reports
-make test SHELLSPEC_FLAGS="--format progress --output junit --reportdir tmp/reports"
-```
-The report will be written to `tmp/reports/results_junit.xml` and published automatically by CI.
-
-### Test Coverage
-
-| Feature | Verification |
-| --- | --- |
-| Runtime lifecycle (`ctx new`, `ctx destroy`) | `spec/lib/ctx_spec.sh` |
-| Topic asset management (`topic new`, `topic destroy`) | `spec/lib/topic_spec.sh` |
-| Topic dispatcher lifecycle (`topic start`, `topic stop`) | `spec/lib/topic_dispatch_spec.sh` |
-| Topic publishing (`topic send`) | `spec/lib/topic_send_spec.sh` |
-| Bus provisioning and registry management (`bus new`, `bus start`, `bus stop`) | `spec/lib/bus_spec.sh` |
-
-> **Notes**
-> - Bus fan-out routing is under active repair; the end-to-end example in `spec/lib/bus_spec.sh` is temporarily skipped while the issue is investigated.
-> - `topic sub` is an interactive streaming command and is validated manually per the repository testing guidelines.
-
-Build a release artifact using the version recorded in `VERSION` (update the file manually when bumping releases):
-```sh
-make release
-```
-This creates a self-contained `zshmq` that embeds all library code without modifying `VERSION`.
-
-### Supported Make Targets
-- `make bootstrap`
-- `make test`
-- `make release`
-- `VERSION=1.2.3 make release-publish`
-
-`release-publish` expects the GitHub CLI (`gh`) to be authenticated. It updates `VERSION`, rebuilds the bundled `zshmq` script, force-tags `v<version>`, pushes to `origin`, and creates a GitHub release that attaches the generated script.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development, testing, and release workflows.
 
 ## Usage
 List available commands (each supports `-h/--help` plus `-d/--debug` and `-t/--trace` for logging control):
