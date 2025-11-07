@@ -3,8 +3,6 @@ Describe 'bus'
   Include lib/logging.sh
   Include lib/ctx.sh
   Include lib/topic.sh
-  Include lib/topic_send.sh
-  Include lib/topic_sub.sh
   Include lib/bus.sh
 
   zshmq_cli() {

@@ -24,7 +24,17 @@ zshmq_command_file() {
   if [ -z "${ZSHMQ_ROOT:-}" ]; then
     return 1
   fi
-  file="${ZSHMQ_ROOT}/lib/${command}.sh"
+
+  # topic_* subcommands are consolidated in topic.sh
+  case $command in
+    topic_start|topic_stop|topic_send|topic_sub)
+      file="${ZSHMQ_ROOT}/lib/topic.sh"
+      ;;
+    *)
+      file="${ZSHMQ_ROOT}/lib/${command}.sh"
+      ;;
+  esac
+
   if [ -f "$file" ]; then
     printf '%s\n' "$file"
     return 0
@@ -36,7 +46,27 @@ zshmq_command_metadata() {
   command=$1
   key=$2
   file=$(zshmq_command_file "$command") || return 1
-  sed -n "s/^[[:space:]]*# *@${key}:[[:space:]]*//p" "$file"
+
+  # For topic_* subcommands, extract only the relevant metadata block
+  case $command in
+    topic_start|topic_stop|topic_send|topic_sub)
+      # Convert topic_send -> "topic send", topic_start -> "topic start"
+      display_name=$(printf '%s' "$command" | sed 's/_/ /')
+      # Extract metadata between #/** with matching command name and next #*/
+      awk -v cmd="$display_name" -v key="$key" '
+        /^#\/\*\*/ { in_block=0 }
+        /^# '"$display_name"' -/ { in_block=1; next }
+        in_block && /^#\*\// { in_block=0 }
+        in_block && /^[[:space:]]*# *@'"$key"':[[:space:]]*/ {
+          sub(/^[[:space:]]*# *@'"$key"':[[:space:]]*/, "")
+          print
+        }
+      ' "$file"
+      ;;
+    *)
+      sed -n "s/^[[:space:]]*# *@${key}:[[:space:]]*//p" "$file"
+      ;;
+  esac
 }
 
 zshmq_registered_commands() {

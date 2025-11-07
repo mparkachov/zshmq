@@ -33,10 +33,6 @@ if [ -z "${ZSHMQ_EMBEDDED:-}" ]; then
   . "${ZSHMQ_ROOT}/lib/ctx.sh"
   # shellcheck source=../lib/topic.sh
   . "${ZSHMQ_ROOT}/lib/topic.sh"
-  # shellcheck source=../lib/topic_send.sh
-  . "${ZSHMQ_ROOT}/lib/topic_send.sh"
-  # shellcheck source=../lib/topic_sub.sh
-  . "${ZSHMQ_ROOT}/lib/topic_sub.sh"
   # shellcheck source=../lib/bus.sh
   . "${ZSHMQ_ROOT}/lib/bus.sh"
 fi
