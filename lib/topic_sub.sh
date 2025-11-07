@@ -19,37 +19,7 @@ topic_sub_parser_definition() {
   param TOPIC_SUB_TOPIC -T --topic -- 'Topic name to subscribe to'
 }
 
-topic_sub_extract_fifo_pid() {
-  fifo_path=$1
-  name=${fifo_path##*/}
-  pid=${name##*.}
-  case $pid in
-    ''|*[!0-9]*)
-      printf '%s\n' ''
-      return 1
-      ;;
-  esac
-  printf '%s\n' "$pid"
-  return 0
-}
-
-topic_sub_prune_state() {
-  state_path=$1
-  tmp_state="${state_path}.prune.$$"
-  : > "$tmp_state"
-  while IFS= read -r existing_fifo || [ -n "$existing_fifo" ]; do
-    [ -n "$existing_fifo" ] || continue
-    fifo_pid=$(topic_sub_extract_fifo_pid "$existing_fifo")
-    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
-      if [ -p "$existing_fifo" ]; then
-        printf '%s\n' "$existing_fifo" >> "$tmp_state"
-      fi
-    else
-      rm -f "$existing_fifo" 2>/dev/null || :
-    fi
-  done < "$state_path"
-  mv "$tmp_state" "$state_path"
-}
+# Subscriber helper functions now use shared utilities from command_helpers.sh
 
 topic_sub_cleanup() {
   if [ "${TOPIC_SUB_CLEANED:-0}" -eq 1 ]; then
@@ -78,8 +48,8 @@ topic_sub_cleanup() {
         rm -f "$state_fifo" 2>/dev/null || :
         continue
       fi
-      fifo_pid=$(topic_sub_extract_fifo_pid "$state_fifo")
-      if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
+      fifo_pid=$(zshmq_extract_fifo_pid "$state_fifo") || continue
+      if zshmq_is_process_running "$fifo_pid"; then
         if [ -p "$state_fifo" ]; then
           printf '%s\n' "$state_fifo" >> "$tmp_state"
         fi
@@ -145,24 +115,7 @@ topic_sub() {
 
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
-  if [ -z "$target" ]; then
-    zshmq_log_error 'topic sub: target path is empty'
-    return 1
-  fi
-
-  case $target in
-    /|'')
-      zshmq_log_error 'topic sub: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  if [ ! -d "$target" ]; then
-    zshmq_log_error 'topic sub: runtime directory not found: %s' "$target"
-    return 1
-  fi
-
-  runtime_root=${target%/}
+  runtime_root=$(zshmq_ensure_runtime_exists "$target" "topic sub") || return 1
   state_path=${ZSHMQ_STATE:-${runtime_root}/${topic}.state}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
   pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
@@ -182,11 +135,10 @@ topic_sub() {
     return 1
   fi
 
-  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+  dispatcher_pid=$(zshmq_check_dispatcher_running "$pid_path") || {
     zshmq_log_error 'topic sub: dispatcher is not running'
     return 1
-  fi
+  }
 
   TOPIC_SUB_DISPATCHER_PID=$dispatcher_pid
 
@@ -209,7 +161,7 @@ topic_sub() {
   TOPIC_SUB_STATE_PATH=$state_path
 
   if [ -s "$state_path" ]; then
-    topic_sub_prune_state "$state_path"
+    zshmq_prune_state_file "$state_path" "sub"
   fi
 
   trap 'topic_sub_cleanup; exit 130' INT

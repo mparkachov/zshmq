@@ -126,3 +126,118 @@ zshmq_eval_parser() {
   fi
   return 0
 }
+
+# Shared validation and utility functions
+# IMPORTANT: After modifying these shared functions, always run the test suite:
+#   ./scripts/test.sh
+# These functions are used across multiple commands, so changes may have wide impact.
+
+zshmq_validate_runtime_path() {
+  path=$1
+  context=${2:-zshmq}
+
+  if [ -z "$path" ]; then
+    zshmq_log_error '%s: target path is empty' "$context"
+    return 1
+  fi
+
+  case $path in
+    /|'')
+      zshmq_log_error '%s: refusing to operate on root directory' "$context"
+      return 1
+      ;;
+  esac
+
+  printf '%s\n' "${path%/}"
+}
+
+zshmq_ensure_runtime_exists() {
+  path=$1
+  context=${2:-zshmq}
+
+  validated_path=$(zshmq_validate_runtime_path "$path" "$context") || return 1
+
+  if [ ! -d "$validated_path" ]; then
+    zshmq_log_error '%s: runtime directory not found: %s' "$context" "$validated_path"
+    return 1
+  fi
+
+  printf '%s\n' "$validated_path"
+}
+
+zshmq_read_pid_file() {
+  pid_path=$1
+  if [ ! -f "$pid_path" ]; then
+    return 1
+  fi
+  pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
+  if [ -z "$pid" ]; then
+    return 1
+  fi
+  printf '%s\n' "$pid"
+}
+
+zshmq_is_process_running() {
+  pid=$1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+zshmq_check_dispatcher_running() {
+  pid_path=$1
+  dispatcher_pid=$(zshmq_read_pid_file "$pid_path") || return 1
+  if ! zshmq_is_process_running "$dispatcher_pid"; then
+    rm -f "$pid_path"
+    return 1
+  fi
+  printf '%s\n' "$dispatcher_pid"
+}
+
+zshmq_wait_for_process_termination() {
+  pid=$1
+  max_attempts=${2:-5}
+  attempt=1
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if ! zshmq_is_process_running "$pid"; then
+      return 0
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
+zshmq_extract_fifo_pid() {
+  fifo_path=$1
+  name=${fifo_path##*/}
+  pid=${name##*.}
+  case $pid in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$pid"
+}
+
+zshmq_prune_state_file() {
+  state_path=$1
+  tmp_suffix=${2:-prune}
+
+  tmp_state="${state_path}.${tmp_suffix}.$$"
+  : > "$tmp_state"
+
+  while IFS= read -r fifo_path || [ -n "$fifo_path" ]; do
+    [ -n "$fifo_path" ] || continue
+    fifo_pid=$(zshmq_extract_fifo_pid "$fifo_path") || continue
+    if zshmq_is_process_running "$fifo_pid"; then
+      if [ -p "$fifo_path" ]; then
+        printf '%s\n' "$fifo_path" >> "$tmp_state"
+      fi
+    else
+      rm -f "$fifo_path" 2>/dev/null || :
+    fi
+  done < "$state_path"
+
+  mv "$tmp_state" "$state_path"
+}

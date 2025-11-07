@@ -22,20 +22,7 @@ ctx_print_usage() {
 
 ctx_resolve_target() {
   target=$1
-
-  if [ -z "$target" ]; then
-    zshmq_log_error 'ctx: target path is empty'
-    return 1
-  fi
-
-  case $target in
-    /|'')
-      zshmq_log_error 'ctx: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  printf '%s\n' "${target%/}"
+  zshmq_validate_runtime_path "$target" "ctx"
 }
 
 ctx_new_impl() {

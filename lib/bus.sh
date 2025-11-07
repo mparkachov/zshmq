@@ -36,25 +36,7 @@ bus_stop_parser_definition() {
 
 bus_resolve_runtime() {
   path=$1
-
-  if [ -z "$path" ]; then
-    zshmq_log_error 'bus: target path is empty'
-    return 1
-  fi
-
-  case $path in
-    /|'')
-      zshmq_log_error 'bus: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  if [ ! -d "$path" ]; then
-    zshmq_log_error 'bus: runtime directory not found: %s' "$path"
-    return 1
-  fi
-
-  printf '%s\n' "${path%/}"
+  zshmq_ensure_runtime_exists "$path" "bus"
 }
 
 bus_dispatch_ready() {
@@ -62,17 +44,7 @@ bus_dispatch_ready() {
   topic_name=$2
 
   pid_path=${runtime_root}/${topic_name}.pid
-  if [ ! -f "$pid_path" ]; then
-    return 1
-  fi
-
-  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    rm -f "$pid_path"
-    return 1
-  fi
-
-  return 0
+  zshmq_check_dispatcher_running "$pid_path" >/dev/null
 }
 
 bus_publish_to_topic() {
@@ -197,39 +169,13 @@ bus_stop_runtime() {
   runtime_root=$1
   pid_path=${runtime_root}/bus.pid
 
-  case $runtime_root in
-    /|'')
-      zshmq_log_error 'bus stop: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
+  zshmq_validate_runtime_path "$runtime_root" "bus stop" >/dev/null || return 1
 
-  if [ ! -f "$pid_path" ]; then
-    return 0
-  fi
-
-  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  if [ -z "$dispatcher_pid" ]; then
-    rm -f "$pid_path"
-    return 0
-  fi
-
-  if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    rm -f "$pid_path"
-    return 0
-  fi
+  dispatcher_pid=$(zshmq_check_dispatcher_running "$pid_path" 2>/dev/null) || return 0
 
   kill "$dispatcher_pid" 2>/dev/null || :
 
-  for attempt in 1 2 3 4 5; do
-    : "$attempt"
-    if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
-
-  if kill -0 "$dispatcher_pid" 2>/dev/null; then
+  if ! zshmq_wait_for_process_termination "$dispatcher_pid" 5; then
     zshmq_log_error 'bus stop: dispatcher (pid=%s) did not terminate' "$dispatcher_pid"
     return 1
   fi
@@ -242,12 +188,7 @@ bus_stop_runtime() {
 bus_destroy() {
   runtime_root=$1
 
-  case $runtime_root in
-    /|'')
-      zshmq_log_error 'bus destroy: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
+  zshmq_validate_runtime_path "$runtime_root" "bus destroy" >/dev/null || return 1
 
   if [ ! -d "$runtime_root" ]; then
     zshmq_log_trace 'bus destroy: runtime missing (%s)' "$runtime_root"
@@ -316,13 +257,9 @@ bus_start() {
     return 1
   fi
 
-  if [ -f "$pid_path" ]; then
-    existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-    if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-      zshmq_log_debug 'bus start: dispatcher already running (pid=%s)' "$existing_pid"
-      return 1
-    fi
-    rm -f "$pid_path"
+  if existing_pid=$(zshmq_check_dispatcher_running "$pid_path" 2>/dev/null); then
+    zshmq_log_debug 'bus start: dispatcher already running (pid=%s)' "$existing_pid"
+    return 1
   fi
 
   if [ "${BUS_FOREGROUND:-0}" = "1" ]; then
@@ -406,14 +343,8 @@ bus_stop() {
 
   target_path=${BUS_CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
-  case $target_path in
-    /|'')
-      zshmq_log_error 'bus stop: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
+  runtime_root=$(zshmq_validate_runtime_path "$target_path" "bus stop") || return 1
 
-  runtime_root=${target_path%/}
   if [ ! -d "$runtime_root" ]; then
     zshmq_log_debug 'bus stop: runtime not found (%s)' "$runtime_root"
     return 0
@@ -494,13 +425,7 @@ bus() {
         zshmq_log_error 'bus destroy: unexpected argument -- %s' "$1"
         return 1
       fi
-      case $target_path in
-        /|'')
-          zshmq_log_error 'bus destroy: refusing to operate on root directory'
-          return 1
-          ;;
-      esac
-      runtime_root=${target_path%/}
+      runtime_root=$(zshmq_validate_runtime_path "$target_path" "bus destroy") || return 1
       bus_destroy "$runtime_root"
       ;;
     start)

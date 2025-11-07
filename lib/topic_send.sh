@@ -93,39 +93,17 @@ topic_send() {
 
   target=${CTX_PATH:-${ZSHMQ_CTX_ROOT:-/tmp/zshmq}}
 
-  if [ -z "$target" ]; then
-    zshmq_log_error 'topic send: target path is empty'
-    return 1
-  fi
+  runtime_root=$(zshmq_ensure_runtime_exists "$target" "topic send") || return 1
 
-  case $target in
-    /|'')
-      zshmq_log_error 'topic send: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  runtime_root=${target%/}
   topic_fifo_path=${ZSHMQ_TOPIC:-${runtime_root}/${topic}.fifo}
   pid_path=${ZSHMQ_TOPIC_PID:-${ZSHMQ_DISPATCH_PID:-${runtime_root}/${topic}.pid}}
-
-  if [ ! -d "$target" ]; then
-    zshmq_log_error 'topic send: runtime directory not found: %s' "$target"
-    return 1
-  fi
 
   if [ ! -p "$topic_fifo_path" ]; then
     zshmq_log_error 'topic send: topic FIFO not found at %s' "$topic_fifo_path"
     return 1
   fi
 
-  if [ -f "$pid_path" ]; then
-    dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  else
-    dispatcher_pid=
-  fi
-
-  if [ -z "$dispatcher_pid" ] || ! kill -0 "$dispatcher_pid" 2>/dev/null; then
+  if ! zshmq_check_dispatcher_running "$pid_path" >/dev/null 2>&1; then
     zshmq_log_error 'topic send: dispatcher is not running'
     return 1
   fi

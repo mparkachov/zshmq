@@ -23,6 +23,13 @@ Execute the full ShellSpec suite via the dedicated test runner:
 ./scripts/test.sh
 ```
 
+**IMPORTANT**: Always run the full test suite after making changes to:
+- Shared functions in `lib/command_helpers.sh` (these are used across all commands)
+- Any `lib/*.sh` module
+- Core dispatcher or subscription logic
+
+The shared helper functions in `lib/command_helpers.sh` are used extensively across multiple commands. Changes to these functions can have wide-reaching effects, so comprehensive testing is critical before committing.
+
 Environment overrides:
 
 - `SHELLSPEC_SHELL=/path/to/sh ./scripts/test.sh`

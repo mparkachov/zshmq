@@ -212,25 +212,7 @@ topic_require_topic() {
 
 topic_ensure_runtime() {
   path=$1
-
-  if [ -z "$path" ]; then
-    zshmq_log_error 'topic: target path is empty'
-    return 1
-  fi
-
-  case $path in
-    /|'')
-      zshmq_log_error 'topic: refusing to operate on root directory'
-      return 1
-      ;;
-  esac
-
-  if [ ! -d "$path" ]; then
-    zshmq_log_error 'topic: runtime directory not found: %s' "$path"
-    return 1
-  fi
-
-  printf '%s\n' "${path%/}"
+  zshmq_ensure_runtime_exists "$path" "topic"
 }
 
 topic_new() {
@@ -319,37 +301,7 @@ topic_destroy() {
   fi
 }
 
-dispatcher_extract_fifo_pid() {
-  fifo_path=$1
-  name=${fifo_path##*/}
-  pid=${name##*.}
-  case $pid in
-    ''|*[!0-9]*)
-      printf '%s\n' ''
-      return 1
-      ;;
-  esac
-  printf '%s\n' "$pid"
-  return 0
-}
-
-dispatcher_prune_state() {
-  state_path=$1
-  tmp_state="${state_path}.dispatcher.$$"
-  : > "$tmp_state"
-  while IFS= read -r fifo || [ -n "$fifo" ]; do
-    [ -n "$fifo" ] || continue
-    fifo_pid=$(dispatcher_extract_fifo_pid "$fifo")
-    if [ -n "$fifo_pid" ] && kill -0 "$fifo_pid" 2>/dev/null; then
-      if [ -p "$fifo" ]; then
-        printf '%s\n' "$fifo" >> "$tmp_state"
-      fi
-    else
-      rm -f "$fifo" 2>/dev/null || :
-    fi
-  done < "$state_path"
-  mv "$tmp_state" "$state_path"
-}
+# Dispatcher helper functions now use shared utilities from command_helpers.sh
 
 zshmq_dispatch_loop() {
   topic_fifo_path=$1
@@ -390,13 +342,13 @@ zshmq_dispatch_loop() {
         if [ -f "$state_path" ] && [ -n "$topic" ]; then
           message_body=$message
           if [ -s "$state_path" ]; then
-            dispatcher_prune_state "$state_path"
+            zshmq_prune_state_file "$state_path" "dispatcher"
           fi
           zshmq_log_trace 'dispatcher: topic=%s message=%s' "$topic" "$message_body"
           while IFS= read -r fifo_path || [ -n "$fifo_path" ]; do
             [ -n "$fifo_path" ] || continue
-            fifo_pid=$(dispatcher_extract_fifo_pid "$fifo_path")
-            if [ -z "$fifo_pid" ] || ! kill -0 "$fifo_pid" 2>/dev/null; then
+            fifo_pid=$(zshmq_extract_fifo_pid "$fifo_path") || continue
+            if ! zshmq_is_process_running "$fifo_pid"; then
               continue
             fi
             if [ -p "$fifo_path" ]; then
@@ -503,13 +455,9 @@ topic_start_cmd() {
     return 1
   fi
 
-  if [ -f "$pid_path" ]; then
-    existing_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-    if [ -n "$existing_pid" ] && kill -0 "$existing_pid" 2>/dev/null; then
-      zshmq_log_debug 'topic start: dispatcher already running (pid=%s)' "$existing_pid"
-      return 1
-    fi
-    rm -f "$pid_path"
+  if existing_pid=$(zshmq_check_dispatcher_running "$pid_path" 2>/dev/null); then
+    zshmq_log_debug 'topic start: dispatcher already running (pid=%s)' "$existing_pid"
+    return 1
   fi
 
   if [ "${TOPIC_START_FOREGROUND:-0}" = "1" ]; then
@@ -644,35 +592,14 @@ topic_stop_cmd() {
     pid_path=${runtime_root}/${topic}.pid
   fi
 
-  if [ -z "$pid_path" ] || [ ! -f "$pid_path" ]; then
+  dispatcher_pid=$(zshmq_check_dispatcher_running "$pid_path" 2>/dev/null) || {
     zshmq_log_debug 'topic stop: dispatcher is not running.'
     return 0
-  fi
-
-  dispatcher_pid=$(tr -d '\r\n' < "$pid_path" 2>/dev/null || :)
-  if [ -z "$dispatcher_pid" ]; then
-    rm -f "$pid_path"
-    zshmq_log_debug 'topic stop: dispatcher is not running.'
-    return 0
-  fi
-
-  if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-    rm -f "$pid_path"
-    zshmq_log_debug 'topic stop: dispatcher is not running.'
-    return 0
-  fi
+  }
 
   kill "$dispatcher_pid" 2>/dev/null || :
 
-  for attempt in 1 2 3 4 5; do
-    : "$attempt"
-    if ! kill -0 "$dispatcher_pid" 2>/dev/null; then
-      break
-    fi
-    sleep 1
-  done
-
-  if kill -0 "$dispatcher_pid" 2>/dev/null; then
+  if ! zshmq_wait_for_process_termination "$dispatcher_pid" 5; then
     zshmq_log_error 'topic stop: dispatcher (pid=%s) did not terminate' "$dispatcher_pid"
     return 1
   fi
