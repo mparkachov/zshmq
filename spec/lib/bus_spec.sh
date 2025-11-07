@@ -90,4 +90,79 @@ Describe 'bus'
     The file "$ZSHMQ_CTX_ROOT/topics.reg" should be file
     The contents of file "$ZSHMQ_CTX_ROOT/topics.reg" should include "alerts${tab}^ALERT"
   End
+
+  Context 'bus lifecycle'
+    It 'starts the bus dispatcher successfully'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      When run zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start
+      The status should be success
+      The stderr should equal ''
+      The path "$ZSHMQ_CTX_ROOT/bus.pid" should be file
+      The file "$ZSHMQ_CTX_ROOT/bus.pid" should not be empty file
+    End
+
+    It 'fails to start when bus is not provisioned'
+      When run zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start
+      The status should be failure
+      The stderr should include '[ERROR] bus start: bus FIFO not found'
+    End
+
+    It 'fails to start when already running'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start >/dev/null 2>&1
+      When run zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start
+      The status should be failure
+      The stderr should not include '[ERROR] bus start: bus FIFO not found'
+    End
+
+    It 'stops the bus dispatcher successfully'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start >/dev/null 2>&1
+      When run zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" stop
+      The status should be success
+      The stderr should equal ''
+      The path "$ZSHMQ_CTX_ROOT/bus.pid" should not exist
+    End
+
+    It 'succeeds when stopping already stopped bus'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      When run zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" stop
+      The status should be success
+      The stderr should equal ''
+    End
+
+    It 'destroys bus topic and stops dispatcher'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" start >/dev/null 2>&1
+      When run zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" destroy
+      The status should be success
+      The path "$ZSHMQ_CTX_ROOT/bus.fifo" should not exist
+      The path "$ZSHMQ_CTX_ROOT/bus.state" should not exist
+      The path "$ZSHMQ_CTX_ROOT/bus.pid" should not exist
+    End
+  End
+
+
+  Context 'registry updates'
+    It 'updates existing topic regex'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex '^ALERT' >/dev/null 2>&1
+      tab=$(printf '\t')
+
+      # Update with new regex
+      When call zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex '^CRITICAL'
+      The status should be success
+      The contents of file "$ZSHMQ_CTX_ROOT/topics.reg" should include "alerts${tab}^CRITICAL"
+      The contents of file "$ZSHMQ_CTX_ROOT/topics.reg" should not include "alerts${tab}^ALERT"
+    End
+
+    It 'removes registry entry when topic is destroyed'
+      zshmq_cli bus --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" new -T alerts --regex '^ALERT' >/dev/null 2>&1
+      When call zshmq_cli topic --path "$ZSHMQ_CTX_ROOT" destroy -T alerts
+      The status should be success
+      tab=$(printf '\t')
+      The contents of file "$ZSHMQ_CTX_ROOT/topics.reg" should not include "alerts${tab}^ALERT"
+    End
+  End
 End

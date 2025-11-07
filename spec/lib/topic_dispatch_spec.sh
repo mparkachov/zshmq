@@ -125,6 +125,43 @@ Describe 'topic dispatcher'
       The status should be success
       The stdout should include '[TRACE] dispatcher: topic=ALERT message=system overload'
     End
+
+    It 'starts successfully when PID file contains dead process'
+      ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
+
+      # Create stale PID file with non-existent PID
+      printf '999999\n' > "$ZSHMQ_CTX_ROOT/test.pid"
+
+      When run topic start --path "$ZSHMQ_CTX_ROOT" --topic test
+      The status should be success
+      The stderr should equal ''
+      The path "$ZSHMQ_CTX_ROOT/test.pid" should be file
+    End
+
+    It 'starts successfully when PID file contains invalid data'
+      ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
+
+      # Create PID file with invalid content
+      printf 'not-a-pid\n' > "$ZSHMQ_CTX_ROOT/test.pid"
+
+      When run topic start --path "$ZSHMQ_CTX_ROOT" --topic test
+      The status should be success
+      The stderr should equal ''
+    End
+
+    It 'starts successfully when PID file is empty'
+      ctx --path "$ZSHMQ_CTX_ROOT" new >/dev/null 2>&1
+      topic --path "$ZSHMQ_CTX_ROOT" new -T test >/dev/null 2>&1
+
+      # Create empty PID file
+      : > "$ZSHMQ_CTX_ROOT/test.pid"
+
+      When run topic start --path "$ZSHMQ_CTX_ROOT" --topic test
+      The status should be success
+      The stderr should equal ''
+    End
   End
 
   Context 'stop'

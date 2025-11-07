@@ -127,6 +127,29 @@ zshmq topic new -T topic [--regex REGEX]
 ```
 Creates the FIFO (`topic.fifo`) and state file (`topic.state`) used by the dispatcher. Repeat for each topic you plan to route. When the routing bus is enabled (see below), supply `--regex` to register the topic's fan-out rule in the shared `topics.reg` registry; leave the regex empty to opt out of bus deliveries for that topic. **Subscribers will not receive messages until a dispatcher started with `topic start --topic <name>` is running for that topic.**
 
+#### Topic Name Constraints
+
+Topic names must follow these rules:
+- ❌ **No spaces** - use underscores or hyphens instead (e.g., `my_topic` not `my topic`)
+- ❌ **No pipe characters** `|` - reserved for internal message framing
+- ❌ **No forward slashes** `/` - conflicts with file path separators
+- ❌ **No tabs or newlines** - breaks message parsing
+- ❌ **Maximum length ~200 characters** - file system limits apply (actual limit varies by OS)
+- ✅ **Alphanumeric, underscores, hyphens recommended** - e.g., `alerts`, `system-logs`, `metrics_v2`
+
+**Examples:**
+```bash
+# Good topic names
+zshmq topic new -T alerts
+zshmq topic new -T system-logs
+zshmq topic new -T metrics_v2
+
+# Bad topic names (will be rejected)
+zshmq topic new -T "my topic"      # Contains spaces
+zshmq topic new -T "logs/errors"   # Contains slash
+zshmq topic new -T "status|info"   # Contains pipe
+```
+
 ### Step 3: Start Dispatcher
 ```bash
 zshmq topic start --topic topic

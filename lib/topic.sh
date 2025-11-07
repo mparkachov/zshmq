@@ -204,6 +204,10 @@ topic_require_topic() {
       zshmq_log_error 'topic %s: topic must not contain newlines' "$subcommand"
       return 1
       ;;
+    *' '*)
+      zshmq_log_error 'topic %s: topic must not contain spaces' "$subcommand"
+      return 1
+      ;;
   esac
 
   TOPIC_NAME=$topic_name
