@@ -50,7 +50,8 @@ zshmq_log() {
     fi
 
   timestamp=$(zshmq_log_timestamp)
-  printf '%s [%s] %s\n' "$timestamp" "$normalized" "$message" >&2
+  log_output=${ZSHMQ_LOG_OUTPUT:-/dev/stderr}
+  printf '%s [%s] %s\n' "$timestamp" "$normalized" "$message" >> "$log_output"
 }
 
 zshmq_log_trace() {

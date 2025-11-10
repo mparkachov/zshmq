@@ -392,18 +392,7 @@ topic_start_parser_definition() {
 topic_start_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic start: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic start" || return 1
 
   unset TOPIC_START_FOREGROUND || :
 
@@ -538,18 +527,7 @@ topic_stop_parser_definition() {
 topic_stop_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic stop: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic stop" || return 1
 
   set +e
   zshmq_eval_parser topic_stop topic_stop_parser_definition "$@"
@@ -663,18 +641,7 @@ topic_send_trim() {
 topic_send_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic send: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic send" || return 1
 
   # shellcheck disable=SC2034
   ZSHMQ_PARSER_USAGE='zshmq topic send --topic TOPIC [--path PATH] MESSAGE...'
@@ -813,18 +780,7 @@ topic_sub_cleanup() {
 topic_sub_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic sub: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic sub" || return 1
 
   # shellcheck disable=SC2034
   ZSHMQ_PARSER_USAGE='zshmq topic sub --topic TOPIC [--path PATH]'

@@ -434,6 +434,22 @@ zshmq_print_command_help() {
   fi
 }
 
+zshmq_ensure_getoptions() {
+  context=${1:-zshmq}
+  if ! command -v getoptions >/dev/null 2>&1; then
+    if [ -z "${ZSHMQ_ROOT:-}" ]; then
+      zshmq_log_error '%s: ZSHMQ_ROOT is not set' "$context"
+      return 1
+    fi
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
+  fi
+}
+
 zshmq_eval_parser() {
   command=$1
   parser_fn=$2
@@ -631,7 +647,8 @@ zshmq_log() {
     fi
 
   timestamp=$(zshmq_log_timestamp)
-  printf '%s [%s] %s\n' "$timestamp" "$normalized" "$message" >&2
+  log_output=${ZSHMQ_LOG_OUTPUT:-/dev/stderr}
+  printf '%s [%s] %s\n' "$timestamp" "$normalized" "$message" >> "$log_output"
 }
 
 zshmq_log_trace() {
@@ -867,19 +884,7 @@ bus_destroy() {
 bus_start() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'bus start: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # Ensure vendor parser modules are available when getoptions is missing.
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "bus start" || return 1
 
   set +e
   zshmq_eval_parser bus_start bus_start_parser_definition "$@"
@@ -964,18 +969,7 @@ bus_start() {
 bus_stop() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'bus stop: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "bus stop" || return 1
 
   set +e
   zshmq_eval_parser bus_stop bus_stop_parser_definition "$@"
@@ -1512,6 +1506,10 @@ topic_require_topic() {
       zshmq_log_error 'topic %s: topic must not contain newlines' "$subcommand"
       return 1
       ;;
+    *' '*)
+      zshmq_log_error 'topic %s: topic must not contain spaces' "$subcommand"
+      return 1
+      ;;
   esac
 
   TOPIC_NAME=$topic_name
@@ -1696,18 +1694,7 @@ topic_start_parser_definition() {
 topic_start_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic start: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic start" || return 1
 
   unset TOPIC_START_FOREGROUND || :
 
@@ -1842,18 +1829,7 @@ topic_stop_parser_definition() {
 topic_stop_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic stop: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic stop" || return 1
 
   set +e
   zshmq_eval_parser topic_stop topic_stop_parser_definition "$@"
@@ -1967,18 +1943,7 @@ topic_send_trim() {
 topic_send_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic send: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic send" || return 1
 
   # shellcheck disable=SC2034
   ZSHMQ_PARSER_USAGE='zshmq topic send --topic TOPIC [--path PATH] MESSAGE...'
@@ -2117,18 +2082,7 @@ topic_sub_cleanup() {
 topic_sub_cmd() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'topic sub: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "topic sub" || return 1
 
   # shellcheck disable=SC2034
   ZSHMQ_PARSER_USAGE='zshmq topic sub --topic TOPIC [--path PATH]'

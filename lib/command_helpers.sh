@@ -126,6 +126,22 @@ zshmq_print_command_help() {
   fi
 }
 
+zshmq_ensure_getoptions() {
+  context=${1:-zshmq}
+  if ! command -v getoptions >/dev/null 2>&1; then
+    if [ -z "${ZSHMQ_ROOT:-}" ]; then
+      zshmq_log_error '%s: ZSHMQ_ROOT is not set' "$context"
+      return 1
+    fi
+    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
+    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
+    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
+    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
+  fi
+}
+
 zshmq_eval_parser() {
   command=$1
   parser_fn=$2

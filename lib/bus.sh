@@ -208,19 +208,7 @@ bus_destroy() {
 bus_start() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'bus start: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # Ensure vendor parser modules are available when getoptions is missing.
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "bus start" || return 1
 
   set +e
   zshmq_eval_parser bus_start bus_start_parser_definition "$@"
@@ -305,18 +293,7 @@ bus_start() {
 bus_stop() {
   set -eu
 
-  if ! command -v getoptions >/dev/null 2>&1; then
-    if [ -z "${ZSHMQ_ROOT:-}" ]; then
-      zshmq_log_error 'bus stop: ZSHMQ_ROOT is not set'
-      return 1
-    fi
-    # shellcheck source=../vendor/getoptions/lib/getoptions_base.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_base.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_abbr.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_abbr.sh"
-    # shellcheck source=../vendor/getoptions/lib/getoptions_help.sh
-    . "${ZSHMQ_ROOT}/vendor/getoptions/lib/getoptions_help.sh"
-  fi
+  zshmq_ensure_getoptions "bus stop" || return 1
 
   set +e
   zshmq_eval_parser bus_stop bus_stop_parser_definition "$@"
